@@ -37,6 +37,11 @@
 			path = .claude;
 			sourceTree = "<group>";
 		};
+		BF0496BB2F260FF4006290D9 /* docs */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = docs;
+			sourceTree = "<group>";
+		};
 		BF578C3B2F04D19E00C420ED /* livlogios */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = livlogios;
@@ -89,6 +94,7 @@
 				BF0496B52F25F58D006290D9 /* CLAUDE.md */,
 				BF0496B62F25FE6D006290D9 /* .swiftlint.yml */,
 				BF578C3A2F04D19E00C420ED /* Products */,
+				BF0496BB2F260FF4006290D9 /* docs */,
 			);
 			sourceTree = "<group>";
 		};

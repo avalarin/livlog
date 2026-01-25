@@ -8,18 +8,25 @@
 import SwiftData
 import SwiftUI
 
+enum ViewMode: String {
+    case grid
+    case list
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Item.date, order: .reverse) private var items: [Item]
     @Query(sort: \Collection.createdAt) private var collections: [Collection]
-    
+
+    @AppStorage("viewMode") private var viewMode: ViewMode = .grid
+
     @State private var showingAddEntry = false
     @State private var showingSmartAdd = false
     @State private var showingCollections = false
     @State private var selectedCollection: Collection?
     @State private var searchText = ""
     @State private var showingDebugMenu = false
-    
+
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12)
@@ -79,15 +86,27 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 60)
                             } else {
-                                LazyVGrid(columns: columns, spacing: 12) {
-                                    ForEach(filteredItems) { item in
-                                        NavigationLink(destination: EntryDetailView(item: item)) {
-                                            EntryCard(item: item)
+                                if viewMode == .grid {
+                                    LazyVGrid(columns: columns, spacing: 12) {
+                                        ForEach(filteredItems) { item in
+                                            NavigationLink(destination: EntryDetailView(item: item)) {
+                                                EntryCard(item: item)
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                        .buttonStyle(.plain)
                                     }
+                                    .padding(.horizontal)
+                                } else {
+                                    LazyVStack(spacing: 8) {
+                                        ForEach(filteredItems) { item in
+                                            NavigationLink(destination: EntryDetailView(item: item)) {
+                                                EntryListRow(item: item)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.horizontal)
                                 }
-                                .padding(.horizontal)
                             }
                         }
                         .padding(.bottom, 100)
@@ -95,32 +114,42 @@ struct ContentView: View {
                     .searchable(text: $searchText, prompt: "Search entries...")
                 }
             }
-            .navigationTitle("Life Log")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Menu {
+                    HStack(spacing: 16) {
                         Button {
-                            showingCollections = true
+                            withAnimation(.spring(response: 0.3)) {
+                                viewMode = viewMode == .grid ? .list : .grid
+                            }
                         } label: {
-                            Label("Manage Collections", systemImage: "folder")
+                            Image(systemName: viewMode == .grid ? "square.grid.2x2" : "list.bullet")
+                                .symbolRenderingMode(.hierarchical)
                         }
-                        
-                        Divider()
-                        
-                        Button {
-                            fillWithTestData()
+
+                        Menu {
+                            Button {
+                                showingCollections = true
+                            } label: {
+                                Label("Manage Collections", systemImage: "folder")
+                            }
+
+                            Divider()
+
+                            Button {
+                                fillWithTestData()
+                            } label: {
+                                Label("Fill with Test Data", systemImage: "doc.badge.plus")
+                            }
+
+                            Button(role: .destructive) {
+                                showingDebugMenu = true
+                            } label: {
+                                Label("Clear All Data", systemImage: "trash")
+                            }
                         } label: {
-                            Label("Fill with Test Data", systemImage: "doc.badge.plus")
+                            Image(systemName: "gear")
+                                .symbolRenderingMode(.hierarchical)
                         }
-                        
-                        Button(role: .destructive) {
-                            showingDebugMenu = true
-                        } label: {
-                            Label("Clear All Data", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "gear")
-                            .symbolRenderingMode(.hierarchical)
                     }
                 }
                 
@@ -350,9 +379,9 @@ struct EntryCard: View {
     
     private var metadataLine: String {
         let fieldOrder = ["Year", "Genre", "Author", "Platform"]
-        let sortedFields = item.additionalFields.sorted { a, b in
-            let indexA = fieldOrder.firstIndex(of: a.key) ?? Int.max
-            let indexB = fieldOrder.firstIndex(of: b.key) ?? Int.max
+        let sortedFields = item.additionalFields.sorted { firstItem, secondItem in
+            let indexA = fieldOrder.firstIndex(of: firstItem.key) ?? Int.max
+            let indexB = fieldOrder.firstIndex(of: secondItem.key) ?? Int.max
             return indexA < indexB
         }
         return sortedFields.map { $0.value }.joined(separator: " • ")
@@ -446,25 +475,119 @@ struct EntryCard: View {
     }
 }
 
+struct EntryListRow: View {
+    let item: Item
+    @Environment(\.modelContext) private var modelContext
+    @State private var showingDeleteAlert = false
+
+    private var coverImage: UIImage? {
+        guard let firstImageData = item.images.first,
+              let image = UIImage(data: firstImageData) else {
+            return nil
+        }
+        return image
+    }
+
+    private var metadataLine: String {
+        let fieldOrder = ["Year", "Genre", "Author", "Platform"]
+        let sortedFields = item.additionalFields.sorted { firstItem, secondItem in
+            let indexA = fieldOrder.firstIndex(of: firstItem.key) ?? Int.max
+            let indexB = fieldOrder.firstIndex(of: secondItem.key) ?? Int.max
+            return indexA < indexB
+        }
+        return sortedFields.map { $0.value }.joined(separator: " • ")
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Group {
+                if let coverImage = coverImage {
+                    Image(uiImage: coverImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 60, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                } else {
+                    Text(item.collection?.icon ?? "📝")
+                        .font(.system(size: 40))
+                        .frame(width: 60, height: 60)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.accentColor.opacity(0.1))
+                        )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+
+                HStack(spacing: 4) {
+                    if !metadataLine.isEmpty {
+                        Text(metadataLine)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(item.score.emoji)
+                    .font(.title3)
+
+                Text(item.date, format: .dateTime.month(.abbreviated).day())
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(12)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .contextMenu {
+            Button(role: .destructive) {
+                showingDeleteAlert = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .alert("Delete Entry", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                withAnimation {
+                    modelContext.delete(item)
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete \"\(item.title)\"?")
+        }
+    }
+}
+
 struct EmptyStateView: View {
     @Binding var showingAddEntry: Bool
-    
+
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 16) {
                 Text("📝")
                     .font(.system(size: 72))
-                
+
                 Text("Your Life Log is Empty")
                     .font(.title2)
                     .fontWeight(.bold)
-                
+
                 Text("Start tracking movies, books, games,\nand everything else you experience!")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
-            
+
             Button {
                 showingAddEntry = true
             } label: {
@@ -488,6 +611,55 @@ struct EmptyStateView: View {
 }
 
 #Preview {
-    ContentView()
-        .modelContainer(for: [Collection.self, Item.self], inMemory: true)
+    // swiftlint:disable:next force_try
+    let container = try! ModelContainer(
+        for: Collection.self, Item.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+
+    let context = container.mainContext
+
+    // Create collections
+    let moviesCollection = Collection(name: "Movies", icon: "🎬")
+    let booksCollection = Collection(name: "Books", icon: "📚")
+    let gamesCollection = Collection(name: "Games", icon: "🎮")
+
+    context.insert(moviesCollection)
+    context.insert(booksCollection)
+    context.insert(gamesCollection)
+
+    // Add sample items
+    let sampleItems = [
+        Item(
+            collection: moviesCollection,
+            title: "Inception",
+            entryDescription: "A mind-bending masterpiece by Christopher Nolan about dream invasion.",
+            score: .great,
+            date: Date(),
+            additionalFields: ["Year": "2010", "Genre": "Sci-Fi, Thriller"]
+        ),
+        Item(
+            collection: booksCollection,
+            title: "1984",
+            entryDescription: "Orwell's dystopian vision of totalitarian future.",
+            score: .great,
+            date: Date().addingTimeInterval(-86400 * 5),
+            additionalFields: ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"]
+        ),
+        Item(
+            collection: gamesCollection,
+            title: "Elden Ring",
+            entryDescription: "Challenging but incredibly rewarding open-world adventure.",
+            score: .great,
+            date: Date().addingTimeInterval(-86400 * 14),
+            additionalFields: ["Year": "2022", "Genre": "Action RPG", "Platform": "PC"]
+        )
+    ]
+
+    for item in sampleItems {
+        context.insert(item)
+    }
+
+    return ContentView()
+        .modelContainer(container)
 }

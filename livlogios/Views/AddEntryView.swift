@@ -99,32 +99,6 @@ struct AddEntryView: View {
                             }
                         }
                     }
-                    
-                    // "No Collection" option
-                    Button {
-                        withAnimation(.spring(response: 0.3)) {
-                            selectedCollection = nil
-                        }
-                    } label: {
-                        VStack(spacing: 6) {
-                            Text("📝")
-                                .font(.title2)
-                            Text("None")
-                                .font(.caption2)
-                                .fontWeight(.medium)
-                        }
-                        .frame(width: 70)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(selectedCollection == nil ? Color.accentColor.opacity(0.15) : Color(.systemGray6))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(selectedCollection == nil ? Color.accentColor : Color.clear, lineWidth: 2)
-                        )
-                    }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -200,11 +174,11 @@ struct AddEntryView: View {
                 .foregroundStyle(.secondary)
             
             DatePicker(
-                "Date",
+                "",
                 selection: $date,
                 displayedComponents: .date
             )
-            .datePickerStyle(.graphical)
+            .datePickerStyle(.wheel)
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 12)
@@ -461,10 +435,6 @@ struct CollectionButton: View {
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isSelected ? Color.accentColor.opacity(0.15) : Color(.systemGray6))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)
