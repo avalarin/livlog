@@ -394,6 +394,7 @@ struct EntryCard: View {
                     Image(uiImage: coverImage)
                         .resizable()
                         .scaledToFill()
+                        .frame(maxWidth: .infinity)
                         .frame(height: 140)
                         .clipped()
                 } else {
@@ -405,6 +406,7 @@ struct EntryCard: View {
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
+                    .frame(maxWidth: .infinity)
                     .frame(height: 140)
                     .overlay(
                         Text(item.collection?.icon ?? "📝")
@@ -412,7 +414,7 @@ struct EntryCard: View {
                             .opacity(0.5)
                     )
                 }
-                
+
                 Text(item.score.emoji)
                     .font(.title3)
                     .padding(6)
@@ -420,7 +422,7 @@ struct EntryCard: View {
                     .clipShape(Circle())
                     .padding(8)
             }
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 4) {
                     Text(item.collection?.icon ?? "📝")
@@ -429,20 +431,19 @@ struct EntryCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Text(item.title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                
+
                 if !metadataLine.isEmpty {
                     Text(metadataLine)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                
+
                 if !item.entryDescription.isEmpty {
                     Text(item.entryDescription)
                         .font(.caption)
@@ -451,7 +452,9 @@ struct EntryCard: View {
                 }
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity)
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)

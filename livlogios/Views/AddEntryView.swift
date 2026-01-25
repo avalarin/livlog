@@ -31,6 +31,13 @@ struct AddEntryView: View {
     /// Image picker
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
+
+    /// AI Helper state
+    @State private var isLoadingOptions = false
+    @State private var showOptionsSheet = false
+    @State private var foundOptions: [OpenAIService.EntryOption] = []
+    @State private var errorMessage: String?
+    @State private var showError = false
     
     var body: some View {
         NavigationStack {
@@ -75,6 +82,27 @@ struct AddEntryView: View {
                     selectedCollection = first
                 }
             }
+            .sheet(isPresented: $isLoadingOptions) {
+                LoadingSheet()
+                    .interactiveDismissDisabled()
+            }
+            .sheet(isPresented: $showOptionsSheet) {
+                OptionsSelectionSheet(
+                    options: foundOptions,
+                    onSelect: { option in
+                        applyOptionToEntry(option)
+                        showOptionsSheet = false
+                    },
+                    onCancel: {
+                        showOptionsSheet = false
+                    }
+                )
+            }
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage ?? "An error occurred")
+            }
         }
     }
     
@@ -111,14 +139,24 @@ struct AddEntryView: View {
             Text("Title")
                 .font(.headline)
                 .foregroundStyle(.secondary)
-            
-            TextField("What's it called?", text: $title)
-                .textFieldStyle(.plain)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                )
+
+            HStack(spacing: 8) {
+                TextField("What's it called?", text: $title)
+                    .textFieldStyle(.plain)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.systemGray6))
+                    )
+
+                Button(action: searchWithAI) {
+                    Image(systemName: "sparkles")
+                        .font(.title3)
+                        .foregroundStyle(canUseAIHelper ? .blue : .secondary)
+                }
+                .disabled(!canUseAIHelper)
+                .padding(.trailing, 8)
+            }
         }
         .padding(.horizontal)
     }
@@ -278,12 +316,65 @@ struct AddEntryView: View {
     }
     
     // MARK: - Helpers
-    
+
+    private var canUseAIHelper: Bool {
+        selectedCollection != nil && title.count >= 2
+    }
+
     private func binding(for fieldName: String) -> Binding<String> {
         Binding(
             get: { fieldValues[fieldName] ?? "" },
             set: { fieldValues[fieldName] = $0 }
         )
+    }
+
+    private func searchWithAI() {
+        guard canUseAIHelper else { return }
+
+        isLoadingOptions = true
+        foundOptions = []
+
+        Task {
+            do {
+                let options = try await OpenAIService.searchOptions(for: title)
+
+                await MainActor.run {
+                    isLoadingOptions = false
+
+                    if options.isEmpty {
+                        errorMessage = "Ничего не найдено, попробуйте другое название"
+                        showError = true
+                    } else {
+                        foundOptions = options
+                        showOptionsSheet = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoadingOptions = false
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+        }
+    }
+
+    private func applyOptionToEntry(_ option: OpenAIService.EntryOption) {
+        // Fill description
+        entryDescription = option.description
+
+        // Fill additional fields
+        fieldValues = option.additionalFields
+
+        // Download and apply images
+        Task {
+            let optionWithImages = await OpenAIService.downloadImages(for: option)
+
+            await MainActor.run {
+                let images = optionWithImages.downloadedImages.compactMap { UIImage(data: $0) }
+                selectedImages = Array(images.prefix(3))
+            }
+        }
     }
     
     private func loadItemData(_ item: Item) {
@@ -446,7 +537,7 @@ struct ScoreButton: View {
     let rating: ScoreRating
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
@@ -470,6 +561,141 @@ struct ScoreButton: View {
         }
         .buttonStyle(.plain)
         .scaleEffect(isSelected ? 1.05 : 1.0)
+    }
+}
+
+// MARK: - AI Helper Views
+
+struct LoadingSheet: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            ProgressView()
+                .scaleEffect(1.5)
+            Text("Ищу варианты...")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+}
+
+struct OptionsSelectionSheet: View {
+    let options: [OpenAIService.EntryOption]
+    let onSelect: (OpenAIService.EntryOption) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(options) { option in
+                        AIHelperOptionCard(option: option) {
+                            onSelect(option)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Выберите вариант")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") {
+                        onCancel()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+struct AIHelperOptionCard: View {
+    let option: OpenAIService.EntryOption
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: 12) {
+                // Preview image placeholder
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.systemGray5))
+                    .frame(width: 60, height: 60)
+                    .overlay {
+                        if let firstImageUrl = option.imageUrls.first,
+                           let url = URL(string: firstImageUrl) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                case .failure, .empty:
+                                    Image(systemName: "photo")
+                                        .foregroundStyle(.secondary)
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            .frame(width: 60, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } else {
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    // Title and year
+                    HStack(spacing: 4) {
+                        Text(option.title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        if let year = option.year {
+                            Text("(\(year))")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Genre/Author
+                    if let genre = option.genre {
+                        Text(genre)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    if let author = option.author {
+                        Text(author)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    if let platform = option.platform {
+                        Text(platform)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    // Short description
+                    Text(option.description)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
