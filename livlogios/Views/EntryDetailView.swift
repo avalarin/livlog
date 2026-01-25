@@ -5,8 +5,8 @@
 //  Created by avprokopev on 31.12.2025.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct EntryDetailView: View {
     let item: Item

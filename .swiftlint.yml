@@ -1,0 +1,82 @@
+# SwiftLint Configuration for livlogios
+
+# Paths to exclude from linting
+excluded:
+  - .build
+  - .swiftpm
+  - Pods
+  - Carthage
+  - DerivedData
+  - .git
+
+# Paths to include (optional, by default all Swift files are included)
+included:
+  - livlogios
+  - livlogiosTests
+  - livlogiosUITests
+
+# Disable specific rules
+disabled_rules:
+  - trailing_whitespace  # Allow trailing whitespace
+  - todo                 # Allow TODO comments
+  - multiple_closures_with_trailing_closure  # Common in SwiftUI
+
+# Opt-in rules (disabled by default but recommended)
+opt_in_rules:
+  - empty_count                      # Prefer .isEmpty over count == 0
+  - empty_string                     # Prefer .isEmpty over string == ""
+  - fatal_error_message              # Require message in fatalError
+  - force_unwrapping                 # Warn on force unwrapping (!)
+  - implicitly_unwrapped_optional    # Discourage implicitly unwrapped optionals
+  - multiline_function_chains        # Encourage readable chaining
+  - multiline_parameters             # Readable function parameters
+  - sorted_imports                   # Keep imports sorted
+
+# Rule configurations
+line_length:
+  warning: 120
+  error: 150
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 500
+  error: 1000
+
+function_body_length:
+  warning: 50
+  error: 100
+
+type_body_length:
+  warning: 300
+  error: 500
+
+cyclomatic_complexity:
+  warning: 10
+  error: 20
+
+# Naming conventions
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - id
+    - i
+    - j
+    - x
+    - y
+
+type_name:
+  min_length: 3
+  max_length: 50
+
+# Force cast/unwrap settings
+force_cast: warning
+force_try: warning
+
+# Number of violations to report
+reporter: "xcode"  # Use Xcode-compatible format

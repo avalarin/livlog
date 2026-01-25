@@ -24,12 +24,19 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		BF0496B52F25F58D006290D9 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
+		BF0496B62F25FE6D006290D9 /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
 		BF578C392F04D19E00C420ED /* livlogios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = livlogios.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BF578C482F04D19F00C420ED /* livlogiosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = livlogiosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BF578C522F04D19F00C420ED /* livlogiosUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = livlogiosUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		BF0496B82F260078006290D9 /* .claude */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = .claude;
+			sourceTree = "<group>";
+		};
 		BF578C3B2F04D19E00C420ED /* livlogios */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = livlogios;
@@ -75,9 +82,12 @@
 		BF578C302F04D19E00C420ED = {
 			isa = PBXGroup;
 			children = (
+				BF0496B82F260078006290D9 /* .claude */,
 				BF578C3B2F04D19E00C420ED /* livlogios */,
 				BF578C4B2F04D19F00C420ED /* livlogiosTests */,
 				BF578C552F04D19F00C420ED /* livlogiosUITests */,
+				BF0496B52F25F58D006290D9 /* CLAUDE.md */,
+				BF0496B62F25FE6D006290D9 /* .swiftlint.yml */,
 				BF578C3A2F04D19E00C420ED /* Products */,
 			);
 			sourceTree = "<group>";

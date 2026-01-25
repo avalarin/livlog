@@ -5,8 +5,8 @@
 //  Created by avprokopev on 31.12.2025.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
@@ -16,7 +16,7 @@ struct ContentView: View {
     @State private var showingAddEntry = false
     @State private var showingSmartAdd = false
     @State private var showingCollections = false
-    @State private var selectedCollection: Collection? = nil
+    @State private var selectedCollection: Collection?
     @State private var searchText = ""
     @State private var showingDebugMenu = false
     
@@ -235,7 +235,7 @@ struct ContentView: View {
                 entryDescription: "Learned to make pasta from scratch. Meh instructor.",
                 score: .bad,
                 date: Date().addingTimeInterval(-86400 * 45)
-            ),
+            )
         ]
         
         for item in testItems {

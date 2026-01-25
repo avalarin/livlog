@@ -5,15 +5,15 @@
 //  Created by avprokopev on 31.12.2025.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 @main
 struct livlogiosApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Collection.self,
-            Item.self,
+            Item.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

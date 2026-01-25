@@ -5,9 +5,9 @@
 //  Created by avprokopev on 31.12.2025.
 //
 
-import SwiftUI
-import SwiftData
 import PhotosUI
+import SwiftData
+import SwiftUI
 
 struct AddEntryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -296,7 +296,7 @@ struct AddEntryView: View {
                 index: index,
                 onDelete: {
                     withAnimation {
-                        let _ = selectedImages.remove(at: index)
+                        _ = selectedImages.remove(at: index)
                     }
                 }
             )
@@ -504,6 +504,17 @@ struct ScoreButton: View {
 }
 
 #Preview {
-    AddEntryView()
-        .modelContainer(for: [Collection.self, Item.self], inMemory: true)
+    // swiftlint:disable:next force_try
+    let container = try! ModelContainer(
+        for: Collection.self, Item.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+
+    // Add default collections
+    for (name, icon) in Collection.defaultCollections {
+        container.mainContext.insert(Collection(name: name, icon: icon))
+    }
+
+    return AddEntryView()
+        .modelContainer(container)
 }
