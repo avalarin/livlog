@@ -10,6 +10,8 @@ import SwiftData
 import SwiftUI
 
 struct AddEntryView: View {
+    enum FocusedField: Hashable { case title, notes }
+    
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Collection.createdAt) private var collections: [Collection]
@@ -24,9 +26,8 @@ struct AddEntryView: View {
     @State private var entryDescription: String = ""
     @State private var score: ScoreRating = .okay
     @State private var date: Date = Date()
-    
-    /// Dynamic additional fields storage
-    @State private var fieldValues: [String: String] = [:]
+
+    @FocusState private var focus: FocusedField?
     
     /// Image picker
     @State private var selectedPhotos: [PhotosPickerItem] = []
@@ -38,36 +39,86 @@ struct AddEntryView: View {
     @State private var foundOptions: [OpenAIService.EntryOption] = []
     @State private var errorMessage: String?
     @State private var showError = false
+
+    /// Date picker state
+    @State private var showDatePicker = false
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
                     collectionPickerSection
-                    titleSection
-                    additionalFieldsSection
+                    textSection
                     imagesSection
-                    notesSection
-                    scoreSection
-                    dateSection
                 }
                 .padding(.vertical)
             }
-            .navigationTitle(isEditing ? "Edit Entry" : "New Entry")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "chevron.left")
+                            .fontWeight(.semibold)
                     }
                 }
                 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveEntry()
+                if focus == nil {
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        Button(action: searchWithAI) {
+                            Image(systemName: "sparkles")
+                        }
+                        
+                        PhotosPicker(
+                            selection: $selectedPhotos,
+                            maxSelectionCount: 3 - selectedImages.count,
+                            matching: .images
+                        ) {
+                            Image(systemName: "photo")
+                        }
+                        
+                        Spacer()
                     }
-                    .fontWeight(.semibold)
+                }
+
+                if focus != nil {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Button(action: searchWithAI) {
+                            Image(systemName: "sparkles")
+                        }
+                        
+                        PhotosPicker(
+                            selection: $selectedPhotos,
+                            maxSelectionCount: 3 - selectedImages.count,
+                            matching: .images
+                        ) {
+                            Image(systemName: "photo")
+                        }
+                        
+                        Spacer()
+                        
+                        Button("Done") { focus = nil }
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showDatePicker = true }) {
+                        Image(systemName: "star")
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showDatePicker = true }) {
+                        Image(systemName: "calendar")
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: { saveEntry() }) {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.semibold)
+                    }
                     .disabled(title.isEmpty)
+                    .buttonStyle(.borderedProminent)
                 }
             }
             .onChange(of: selectedPhotos) { _, newValue in
@@ -103,6 +154,10 @@ struct AddEntryView: View {
             } message: {
                 Text(errorMessage ?? "An error occurred")
             }
+            .sheet(isPresented: $showDatePicker) {
+                DatePickerSheet(date: $date)
+                    .presentationDetents([.height(400)])
+            }
         }
     }
     
@@ -111,10 +166,6 @@ struct AddEntryView: View {
     @ViewBuilder
     private var collectionPickerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Collection")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(collections) { collection in
@@ -134,170 +185,45 @@ struct AddEntryView: View {
     }
     
     @ViewBuilder
-    private var titleSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Title")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 8) {
-                TextField("What's it called?", text: $title)
-                    .textFieldStyle(.plain)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemGray6))
-                    )
-
-                Button(action: searchWithAI) {
-                    Image(systemName: "sparkles")
-                        .font(.title3)
-                        .foregroundStyle(canUseAIHelper ? .blue : .secondary)
-                }
-                .disabled(!canUseAIHelper)
-                .padding(.trailing, 8)
-            }
-        }
-        .padding(.horizontal)
-    }
-    
-    @ViewBuilder
-    private var notesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Notes")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            
-            TextField("Your thoughts...", text: $entryDescription, axis: .vertical)
+    private var textSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TextField("Title", text: $title)
                 .textFieldStyle(.plain)
-                .lineLimit(3...6)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                )
-        }
-        .padding(.horizontal)
-    }
-    
-    @ViewBuilder
-    private var scoreSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("How was it?")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                .bold()
+                .padding(.horizontal, 12)
+                .focused($focus, equals: .title)
             
-            HStack(spacing: 16) {
-                ForEach(ScoreRating.allCases) { rating in
-                    ScoreButton(
-                        rating: rating,
-                        isSelected: score == rating
-                    ) {
-                        withAnimation(.spring(response: 0.3)) {
-                            score = rating
-                        }
-                    }
+            ZStack(alignment: .topLeading) {
+                if true {
+                    Text("Details, e.g. year, genre...")
+                        .foregroundColor(.secondary)
+                        .padding(4)
+                        .padding(.top, 4)
                 }
+
+                TextEditor(text: $entryDescription)
+                    .opacity(entryDescription.isEmpty ? 0.25 : 1)
+                    .contentMargins(.zero)
+                    .foregroundColor(.primary)
+                    .padding(.zero)
+                    .focused($focus, equals: .notes)
             }
-            .frame(maxWidth: .infinity)
+            .frame(minHeight: 120)
+            .padding(.horizontal, 8)
         }
-        .padding(.horizontal)
-    }
-    
-    @ViewBuilder
-    private var dateSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("When?")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            
-            DatePicker(
-                "",
-                selection: $date,
-                displayedComponents: .date
-            )
-            .datePickerStyle(.wheel)
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemGray6))
-            )
-        }
-        .padding(.horizontal)
-    }
-    
-    @ViewBuilder
-    private var additionalFieldsSection: some View {
-        VStack(spacing: 16) {
-            DynamicFieldInput(
-                fieldName: "Year",
-                value: binding(for: "Year")
-            )
-            DynamicFieldInput(
-                fieldName: "Genre",
-                value: binding(for: "Genre")
-            )
-            DynamicFieldInput(
-                fieldName: "Author",
-                value: binding(for: "Author")
-            )
-            DynamicFieldInput(
-                fieldName: "Platform",
-                value: binding(for: "Platform")
-            )
-        }
-        .padding(.horizontal)
+        .padding(.horizontal, 8)
     }
     
     @ViewBuilder
     private var imagesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Images")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                Text("\(selectedImages.count)/3")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    addPhotoButton
                     imagesList
                 }
             }
         }
         .padding(.horizontal)
-    }
-    
-    @ViewBuilder
-    private var addPhotoButton: some View {
-        if selectedImages.count < 3 {
-            PhotosPicker(
-                selection: $selectedPhotos,
-                maxSelectionCount: 3 - selectedImages.count,
-                matching: .images
-            ) {
-                VStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                    Text("Add")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 100, height: 100)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                        .strokeBorder(Color(.systemGray4), style: StrokeStyle(lineWidth: 2, dash: [6]))
-                )
-            }
-        }
     }
     
     @ViewBuilder
@@ -319,13 +245,6 @@ struct AddEntryView: View {
 
     private var canUseAIHelper: Bool {
         selectedCollection != nil && title.count >= 2
-    }
-
-    private func binding(for fieldName: String) -> Binding<String> {
-        Binding(
-            get: { fieldValues[fieldName] ?? "" },
-            set: { fieldValues[fieldName] = $0 }
-        )
     }
 
     private func searchWithAI() {
@@ -360,11 +279,20 @@ struct AddEntryView: View {
     }
 
     private func applyOptionToEntry(_ option: OpenAIService.EntryOption) {
-        // Fill description
-        entryDescription = option.description
+        // Format notes: first line metadata, then description
+        var notesText = ""
 
-        // Fill additional fields
-        fieldValues = option.additionalFields
+        // Add metadata to first line
+        if !option.additionalFields.isEmpty {
+            let fieldsArray = option.additionalFields
+                .sorted { $0.key < $1.key }
+                .map { $0.value }
+            notesText = fieldsArray.joined(separator: ", ") + "\n"
+        }
+
+        // Add description
+        notesText += option.description
+        entryDescription = notesText
 
         // Download and apply images
         Task {
@@ -380,11 +308,27 @@ struct AddEntryView: View {
     private func loadItemData(_ item: Item) {
         selectedCollection = item.collection
         title = item.title
-        entryDescription = item.entryDescription
         score = item.score
         date = item.date
-        fieldValues = item.additionalFields
         selectedImages = item.images.compactMap { UIImage(data: $0) }
+
+        // Migrate additionalFields to notes if needed
+        if !item.additionalFields.isEmpty && item.entryDescription.isEmpty {
+            let fieldsString = item.additionalFields
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key): \($0.value)" }
+                .joined(separator: ", ")
+            entryDescription = fieldsString
+        } else if !item.additionalFields.isEmpty {
+            // If notes already exist, prepend fields
+            let fieldsString = item.additionalFields
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key): \($0.value)" }
+                .joined(separator: ", ")
+            entryDescription = "\(fieldsString)\n\(item.entryDescription)"
+        } else {
+            entryDescription = item.entryDescription
+        }
     }
     
     private func loadImages(from items: [PhotosPickerItem]) async {
@@ -404,16 +348,15 @@ struct AddEntryView: View {
     }
     
     private func saveEntry() {
-        let filledFields = fieldValues.filter { !$0.value.isEmpty }
         let imageData = selectedImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
-        
+
         if let item = editingItem {
             item.collection = selectedCollection
             item.title = title
             item.entryDescription = entryDescription
             item.score = score
             item.date = date
-            item.additionalFields = filledFields
+            item.additionalFields = [:] // Clear old additionalFields
             item.images = imageData
         } else {
             let newItem = Item(
@@ -422,7 +365,7 @@ struct AddEntryView: View {
                 entryDescription: entryDescription,
                 score: score,
                 date: date,
-                additionalFields: filledFields,
+                additionalFields: [:],
                 images: imageData
             )
             modelContext.insert(newItem)
@@ -466,42 +409,6 @@ struct ImageThumbnail: View {
             }
             .padding(4)
             .offset(y: index == 0 ? 20 : 0)
-        }
-    }
-}
-
-struct DynamicFieldInput: View {
-    let fieldName: String
-    @Binding var value: String
-    
-    private var placeholder: String {
-        switch fieldName {
-        case "Year": return "2024"
-        case "Genre": return "Action, Drama..."
-        case "Author": return "Who wrote it?"
-        case "Platform": return "PC, PlayStation, Xbox..."
-        default: return "Enter \(fieldName.lowercased())"
-        }
-    }
-    
-    private var keyboardType: UIKeyboardType {
-        fieldName == "Year" ? .numberPad : .default
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(fieldName)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            
-            TextField(placeholder, text: $value)
-                .textFieldStyle(.plain)
-                .keyboardType(keyboardType)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                )
         }
     }
 }
@@ -696,6 +603,36 @@ struct AIHelperOptionCard: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+struct DatePickerSheet: View {
+    @Binding var date: Date
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                DatePicker(
+                    "Entry date",
+                    selection: $date,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .padding()
+
+                Spacer()
+            }
+            .navigationTitle("Select Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 

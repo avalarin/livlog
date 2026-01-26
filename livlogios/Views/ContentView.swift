@@ -378,13 +378,12 @@ struct EntryCard: View {
     }
     
     private var metadataLine: String {
-        let fieldOrder = ["Year", "Genre", "Author", "Platform"]
-        let sortedFields = item.additionalFields.sorted { firstItem, secondItem in
-            let indexA = fieldOrder.firstIndex(of: firstItem.key) ?? Int.max
-            let indexB = fieldOrder.firstIndex(of: secondItem.key) ?? Int.max
-            return indexA < indexB
+        // Show first line of notes
+        if item.entryDescription.isEmpty {
+            return "(no notes)"
         }
-        return sortedFields.map { $0.value }.joined(separator: " • ")
+        let firstLine = item.entryDescription.components(separatedBy: .newlines).first ?? ""
+        return firstLine.isEmpty ? "(no notes)" : firstLine
     }
     
     var body: some View {
@@ -492,13 +491,12 @@ struct EntryListRow: View {
     }
 
     private var metadataLine: String {
-        let fieldOrder = ["Year", "Genre", "Author", "Platform"]
-        let sortedFields = item.additionalFields.sorted { firstItem, secondItem in
-            let indexA = fieldOrder.firstIndex(of: firstItem.key) ?? Int.max
-            let indexB = fieldOrder.firstIndex(of: secondItem.key) ?? Int.max
-            return indexA < indexB
+        // Show first line of notes
+        if item.entryDescription.isEmpty {
+            return "(no notes)"
         }
-        return sortedFields.map { $0.value }.joined(separator: " • ")
+        let firstLine = item.entryDescription.components(separatedBy: .newlines).first ?? ""
+        return firstLine.isEmpty ? "(no notes)" : firstLine
     }
 
     var body: some View {
