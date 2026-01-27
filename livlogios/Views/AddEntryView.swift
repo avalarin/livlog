@@ -24,7 +24,7 @@ struct AddEntryView: View {
     @State private var selectedCollection: Collection?
     @State private var title: String = ""
     @State private var entryDescription: String = ""
-    @State private var score: ScoreRating = .okay
+    @State private var score: ScoreRating = .undecided
     @State private var date: Date = Date()
 
     @FocusState private var focus: FocusedField?
@@ -42,6 +42,9 @@ struct AddEntryView: View {
 
     /// Date picker state
     @State private var showDatePicker = false
+
+    /// Score picker state
+    @State private var showScoreSheet = false
     
     var body: some View {
         NavigationStack {
@@ -101,11 +104,11 @@ struct AddEntryView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showDatePicker = true }) {
+                    Button(action: { showScoreSheet = true }) {
                         Image(systemName: "star")
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showDatePicker = true }) {
                         Image(systemName: "calendar")
@@ -157,6 +160,10 @@ struct AddEntryView: View {
             .sheet(isPresented: $showDatePicker) {
                 DatePickerSheet(date: $date)
                     .presentationDetents([.height(400)])
+            }
+            .sheet(isPresented: $showScoreSheet) {
+                ScoreSelectionSheet(score: $score)
+                    .presentationDetents([.height(300)])
             }
         }
     }
@@ -633,6 +640,80 @@ struct DatePickerSheet: View {
                 }
             }
         }
+    }
+}
+
+struct ScoreSelectionSheet: View {
+    @Binding var score: ScoreRating
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Current selection display
+                VStack(spacing: 8) {
+                    Text(score.emoji)
+                        .font(.system(size: 64))
+                    Text(score.label)
+                        .font(.headline)
+                        .foregroundStyle(score == .undecided ? .secondary : .primary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(height: 110)
+                .padding(.top, 8)
+
+                // Score options
+                HStack(spacing: 16) {
+                    ForEach(ScoreRating.allCases) { rating in
+                        ScoreOptionButton(
+                            rating: rating,
+                            isSelected: score == rating
+                        ) {
+                            withAnimation(.spring(response: 0.3)) {
+                                score = rating
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+
+                Spacer()
+            }
+            .navigationTitle("What's the verdict?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+}
+
+struct ScoreOptionButton: View {
+    let rating: ScoreRating
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(rating.emoji)
+                .font(.system(size: 44))
+                .frame(width: 64, height: 64)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(isSelected ? Color.accentColor.opacity(0.15) : Color(.systemGray6))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                )
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(isSelected ? 1.1 : 1.0)
     }
 }
 

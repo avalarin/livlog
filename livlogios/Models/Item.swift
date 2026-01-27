@@ -37,25 +37,28 @@ extension Collection {
 // MARK: - Score Rating
 
 enum ScoreRating: Int, Codable, CaseIterable, Identifiable {
+    case undecided = 0
     case bad = 1
     case okay = 2
     case great = 3
-    
+
     var id: Int { rawValue }
-    
+
     var emoji: String {
         switch self {
-        case .bad: return "😕"
-        case .okay: return "🙂"
+        case .undecided: return "🆕"
+        case .bad: return "👎"
+        case .okay: return "👌"
         case .great: return "🤩"
         }
     }
-    
+
     var label: String {
         switch self {
-        case .bad: return "Meh"
-        case .okay: return "Good"
-        case .great: return "Amazing"
+        case .undecided: return "Undecided, ask me later"
+        case .bad: return "Not my thing at all"
+        case .okay: return "Fine for once"
+        case .great: return "Absolutely unhinged"
         }
     }
 }
