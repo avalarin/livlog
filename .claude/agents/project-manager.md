@@ -26,7 +26,7 @@ First, ask the user using AskUserQuestion:
 
 ### Step 2: Gather Requirements
 
-Based on the task type, collect detailed information:
+Based on the task type, collect detailed information using AskUserQuestion:
 
 #### For Features:
 Ask the user about:
