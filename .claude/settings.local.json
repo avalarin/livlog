@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(swiftlint:*)",
-      "Bash(xcodebuild:*)"
+      "Bash(xcodebuild:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(gofmt:*)",
+      "Bash(go test:*)"
     ]
   }
 }

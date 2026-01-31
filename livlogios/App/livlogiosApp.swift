@@ -10,6 +10,8 @@ import SwiftUI
 
 @main
 struct livlogiosApp: App {
+    @StateObject private var connectionMonitor = ConnectionMonitor.shared
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Collection.self,
@@ -27,21 +29,23 @@ struct livlogiosApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .connectionToast(monitor: connectionMonitor)
                 .onAppear {
                     createDefaultCollectionsIfNeeded()
+                    connectionMonitor.startMonitoring()
                 }
         }
         .modelContainer(sharedModelContainer)
     }
-    
+
     private func createDefaultCollectionsIfNeeded() {
         let context = sharedModelContainer.mainContext
-        
+
         let descriptor = FetchDescriptor<Collection>()
         let existingCount = (try? context.fetchCount(descriptor)) ?? 0
-        
+
         guard existingCount == 0 else { return }
-        
+
         for defaultCollection in Collection.defaultCollections {
             let collection = Collection(
                 name: defaultCollection.name,
@@ -49,7 +53,7 @@ struct livlogiosApp: App {
             )
             context.insert(collection)
         }
-        
+
         try? context.save()
     }
 }

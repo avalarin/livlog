@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**livlogios** is a SwiftUI-based iOS life logging app that helps users track and rate their experiences with movies, books, games, and other activities. The app features AI-powered smart entry with automatic metadata and image fetching via OpenRouter's Perplexity API.
+**livlog** is an app that helps users track and rate their experiences with movies, books, games, and other activities. The app features AI-powered smart entry with automatic metadata and image fetching via LLM.
+
+Project consist of:
+- iOS App: SwiftUI-based iOS application
+- Backend: Golang-based backend service
 
 ## Agreements
 
@@ -15,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **Linting**: `swiftlint` - Fix all errors and warnings
 2. **Build**: `xcodebuild -scheme livlogios -configuration Debug build` - Ensure project compiles
 3. **Tests**: `xcodebuild test -scheme livlogios -destination 'platform=iOS Simulator,name=iPhone 15'` - Verify all tests pass
+4. **Documentation**: All documentation must be written in English in stored in docs/
 
 **Do NOT consider a task complete until all three checks pass successfully.** If any check fails, fix the issues before proceeding or asking for further instructions.
 
@@ -120,42 +125,3 @@ Items support flexible metadata via `additionalFields: [String: String]` diction
 ### Collection Matching
 
 SmartAdd auto-selects collections by fuzzy matching the entry type (from API) against collection names. For example, `entryType: "movie"` matches `Collection.name: "Movies"`.
-
-## Testing Utilities
-
-ContentView includes debug menu (gear icon) with:
-- **Fill with Test Data**: Creates sample entries across all collections
-- **Clear All Data**: Removes all entries (with confirmation)
-
-Access these via the toolbar gear button in the main view.
-
-## Important Notes
-
-- The OpenRouter API key in `OpenAIService.swift` should be secured before production
-- SwiftData schema changes may require app reinstall during development
-- Image storage uses Data directly in SwiftData; consider file references for production scale
-- Default collections (Movies, Books, Games) are created on first launch only if database is empty
-
-## Common Workflows
-
-**Adding a new Collection type:**
-1. Modify `Collection.defaultCollections` in `Models/Item.swift`
-2. App will create new defaults only on fresh install; existing users need manual creation
-3. Run quality checks: `swiftlint` → build → tests
-
-**Modifying Item schema:**
-1. Update `Item` model in `Models/Item.swift`
-2. May require deleting app and reinstalling to reset SwiftData container
-3. Consider migration strategy for production
-4. Run quality checks: `swiftlint` → build → tests
-
-**Changing AI search behavior:**
-1. Modify the prompt in `OpenAIService.searchOptions(for:)` at line 76
-2. Update `EntryOptionDTO` struct if response structure changes
-3. Test JSON parsing with various query types
-4. Run quality checks: `swiftlint` → build → tests
-
-**After ANY code modification:**
-1. `swiftlint` (fix all issues)
-2. `xcodebuild -scheme livlogios -configuration Debug build`
-3. `xcodebuild test -scheme livlogios -destination 'platform=iOS Simulator,name=iPhone 15'`

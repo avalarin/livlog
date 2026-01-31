@@ -1,0 +1,45 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/backend
+/server
+/bin/
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets (keep config.yaml as example)
+config.local.yaml
+config.production.yaml
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+dist/
+tmp/
+
+# Debug
+debug
+__debug_bin

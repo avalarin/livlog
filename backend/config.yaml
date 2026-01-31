@@ -1,0 +1,20 @@
+# Livlog Backend Configuration
+#
+# Environment variables can override these settings using the LIVLOG_ prefix.
+# Example: LIVLOG_SERVER_PORT=9090 overrides server.port
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "livlog"
+  user: "livlog"
+  password: "livlog"
+  sslmode: "disable"
+
+logging:
+  # Format: "json" for production (structured logging), "console" for development
+  format: "console"

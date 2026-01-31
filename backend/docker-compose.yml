@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - LIVLOG_DATABASE_HOST=postgres
+      - LIVLOG_DATABASE_PORT=5432
+      - LIVLOG_DATABASE_NAME=livlog
+      - LIVLOG_DATABASE_USER=livlog
+      - LIVLOG_DATABASE_PASSWORD=livlog
+      - LIVLOG_DATABASE_SSLMODE=disable
+      - LIVLOG_LOGGING_FORMAT=json
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=livlog
+      - POSTGRES_USER=livlog
+      - POSTGRES_PASSWORD=livlog
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U livlog -d livlog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
