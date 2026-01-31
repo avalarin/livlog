@@ -20,10 +20,11 @@ struct OpenAIService {
         let genre: String?
         let author: String?
         let platform: String?
+        let summaryLine: String
         let description: String
         let imageUrls: [String]
         var downloadedImages: [Data] = []
-        
+
         var suggestedIcon: String {
             switch entryType.lowercased() {
             case "movie": return "🎬"
@@ -32,7 +33,7 @@ struct OpenAIService {
             default: return "📝"
             }
         }
-        
+
         var additionalFields: [String: String] {
             var fields: [String: String] = [:]
             if let year = year, !year.isEmpty { fields["Year"] = year }
@@ -51,9 +52,10 @@ struct OpenAIService {
         let genre: String?
         let author: String?
         let platform: String?
+        let summaryLine: String?
         let description: String
         let imageUrls: [String]?
-        
+
         func toEntryOption() -> EntryOption {
             EntryOption(
                 title: title,
@@ -62,6 +64,7 @@ struct OpenAIService {
                 genre: genre,
                 author: author,
                 platform: platform,
+                summaryLine: summaryLine ?? "",
                 description: description,
                 imageUrls: imageUrls ?? []
             )
@@ -72,13 +75,14 @@ struct OpenAIService {
         let options: [EntryOptionDTO]
     }
     
+    // swiftlint:disable line_length
     static func searchOptions(for query: String) async throws -> [EntryOption] {
         let prompt = """
         User is searching for: "\(query)"
-        
+
         Search and find what this might be. It could be a movie, book, game, or something else.
         Return up to 5 most relevant options as JSON array.
-        
+
         For each option provide:
         - title: the exact title
         - entryType: one of "movie", "book", "game", or "custom"
@@ -86,12 +90,14 @@ struct OpenAIService {
         - genre: genre(s)
         - author: author name (for books only, null otherwise)
         - platform: gaming platform (for games only, null otherwise)
+        - summaryLine: a short one-line summary with the most important info, tailored to its type. Examples: for movies "2023 • Sci-Fi, Thriller • Christopher Nolan", for books "2020 • Fantasy • Brandon Sanderson", for games "2022 • RPG • PlayStation 5, PC". Use bullet separator •
         - description: brief 1-2 sentence description
-        - imageUrls: array of up to 3 image URLs (posters, covers, screenshots) - must be direct links to images (jpg, png, webp)
-        
-        Return ONLY valid JSON in this exact format, no markdown, no extra text, no explanations:
-        {"options": [{"title": "...", "entryType": "...", "year": "...", "genre": "...", "author": null, "platform": null, "description": "...", "imageUrls": ["https://...", "https://..."]}]}
+        - imageUrls: array of up to 3 image URLs (posters, covers, screenshots) - direct links to images
+
+        Return ONLY valid JSON in this exact format, no markdown, no extra text:
+        {"options": [{"title": "...", "entryType": "...", "year": "...", "genre": "...", "author": null, "platform": null, "summaryLine": "...", "description": "...", "imageUrls": ["url1", "url2"]}]}
         """
+        // swiftlint:enable line_length
         
         let requestBody: [String: Any] = [
             "model": "perplexity/sonar",
