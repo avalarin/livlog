@@ -221,9 +221,6 @@ struct ContentView: View {
             .sheet(isPresented: $showingAddEntry) {
                 AddEntryView()
             }
-            .sheet(isPresented: $showingSmartAdd) {
-                SmartAddEntryView()
-            }
             .sheet(isPresented: $showingCollections) {
                 CollectionsView()
                     .onDisappear {
