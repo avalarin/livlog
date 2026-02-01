@@ -8,11 +8,13 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Logging  LoggingConfig  `mapstructure:"logging"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	Apple    AppleConfig    `mapstructure:"apple"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Database   DatabaseConfig   `mapstructure:"database"`
+	Logging    LoggingConfig    `mapstructure:"logging"`
+	JWT        JWTConfig        `mapstructure:"jwt"`
+	Apple      AppleConfig      `mapstructure:"apple"`
+	OpenRouter OpenRouterConfig `mapstructure:"openrouter"`
+	RateLimit  RateLimitConfig  `mapstructure:"ratelimit"`
 }
 
 type ServerConfig struct {
@@ -44,6 +46,33 @@ type JWTConfig struct {
 
 type AppleConfig struct {
 	BundleID string `mapstructure:"bundle_id"`
+}
+
+type OpenRouterConfig struct {
+	APIKey  string `mapstructure:"api_key"`
+	BaseURL string `mapstructure:"base_url"`
+	Model   string `mapstructure:"model"`
+}
+
+type RateLimitConfig struct {
+	AISearchBasicLimit     int    `mapstructure:"ai_search_basic_limit"`
+	AISearchProLimit       int    `mapstructure:"ai_search_pro_limit"`
+	AISearchUnlimitedLimit int    `mapstructure:"ai_search_unlimited_limit"` // 0 means no limit
+	AISearchPeriod         string `mapstructure:"ai_search_period"`
+}
+
+// GetAISearchLimit returns the AI search limit for the given policy
+func (r *RateLimitConfig) GetAISearchLimit(policy string) int {
+	switch policy {
+	case "basic":
+		return r.AISearchBasicLimit
+	case "pro":
+		return r.AISearchProLimit
+	case "unlimited":
+		return r.AISearchUnlimitedLimit
+	default:
+		return r.AISearchBasicLimit
+	}
 }
 
 func (s *ServerConfig) Address() string {
@@ -82,6 +111,12 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("jwt.issuer", "livlog-api")
 	v.SetDefault("jwt.audience", "livlog-app")
 	v.SetDefault("apple.bundle_id", "net.avalarin.livlog")
+	v.SetDefault("openrouter.base_url", "https://openrouter.ai/api/v1/chat/completions")
+	v.SetDefault("openrouter.model", "perplexity/sonar")
+	v.SetDefault("ratelimit.ai_search_basic_limit", 5)
+	v.SetDefault("ratelimit.ai_search_pro_limit", 50)
+	v.SetDefault("ratelimit.ai_search_unlimited_limit", 0) // 0 means no limit
+	v.SetDefault("ratelimit.ai_search_period", "24h")
 
 	// Read config file
 	if configPath != "" {

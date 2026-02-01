@@ -18,14 +18,24 @@ var (
 	ErrRefreshTokenNotFound = errors.New("refresh token not found")
 )
 
+// AIUsagePolicy represents the AI usage policy for a user
+type AIUsagePolicy string
+
+const (
+	AIUsagePolicyBasic     AIUsagePolicy = "basic"
+	AIUsagePolicyPro       AIUsagePolicy = "pro"
+	AIUsagePolicyUnlimited AIUsagePolicy = "unlimited"
+)
+
 type User struct {
-	ID            uuid.UUID  `json:"id"`
-	Email         *string    `json:"email"`
-	EmailVerified bool       `json:"email_verified"`
-	DisplayName   *string    `json:"display_name"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	ID            uuid.UUID     `json:"id"`
+	Email         *string       `json:"email"`
+	EmailVerified bool          `json:"email_verified"`
+	DisplayName   *string       `json:"display_name"`
+	AIUsagePolicy AIUsagePolicy `json:"ai_usage_policy"`
+	CreatedAt     time.Time     `json:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at"`
+	DeletedAt     *time.Time    `json:"deleted_at,omitempty"`
 }
 
 type RefreshToken struct {
@@ -52,7 +62,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, email, displayName stri
 	query := `
 		INSERT INTO users (email, email_verified, display_name)
 		VALUES ($1, $2, $3)
-		RETURNING id, email, email_verified, display_name, created_at, updated_at, deleted_at
+		RETURNING id, email, email_verified, display_name, ai_usage_policy, created_at, updated_at, deleted_at
 	`
 
 	var user User
@@ -61,6 +71,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, email, displayName stri
 		&user.Email,
 		&user.EmailVerified,
 		&user.DisplayName,
+		&user.AIUsagePolicy,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,
@@ -74,7 +85,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, email, displayName stri
 
 func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	query := `
-		SELECT id, email, email_verified, display_name, created_at, updated_at, deleted_at
+		SELECT id, email, email_verified, display_name, ai_usage_policy, created_at, updated_at, deleted_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -85,6 +96,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, 
 		&user.Email,
 		&user.EmailVerified,
 		&user.DisplayName,
+		&user.AIUsagePolicy,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,
@@ -101,7 +113,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, 
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, email, email_verified, display_name, created_at, updated_at, deleted_at
+		SELECT id, email, email_verified, display_name, ai_usage_policy, created_at, updated_at, deleted_at
 		FROM users
 		WHERE email = $1 AND deleted_at IS NULL
 	`
@@ -112,6 +124,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*Use
 		&user.Email,
 		&user.EmailVerified,
 		&user.DisplayName,
+		&user.AIUsagePolicy,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,
@@ -149,7 +162,7 @@ func (r *UserRepository) DeleteUser(ctx context.Context, id uuid.UUID) error {
 
 func (r *UserRepository) FindUserByProvider(ctx context.Context, provider, providerUserID string) (*User, error) {
 	query := `
-		SELECT u.id, u.email, u.email_verified, u.display_name, u.created_at, u.updated_at, u.deleted_at
+		SELECT u.id, u.email, u.email_verified, u.display_name, u.ai_usage_policy, u.created_at, u.updated_at, u.deleted_at
 		FROM users u
 		JOIN user_auth_providers p ON u.id = p.user_id
 		WHERE p.provider = $1 AND p.provider_user_id = $2 AND u.deleted_at IS NULL
@@ -161,6 +174,7 @@ func (r *UserRepository) FindUserByProvider(ctx context.Context, provider, provi
 		&user.Email,
 		&user.EmailVerified,
 		&user.DisplayName,
+		&user.AIUsagePolicy,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,

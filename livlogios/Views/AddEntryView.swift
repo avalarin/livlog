@@ -248,7 +248,7 @@ struct AddEntryView: View {
     
     // MARK: - Helpers
 
-    private func applyOptionToEntry(_ option: OpenAIService.EntryOption) {
+    private func applyOptionToEntry(_ option: AISearchService.EntryOption) {
         // Set title
         title = option.title
 
@@ -266,7 +266,7 @@ struct AddEntryView: View {
 
         // Download and apply images
         Task {
-            let optionWithImages = await OpenAIService.downloadImages(for: option)
+            let optionWithImages = await AISearchService.shared.downloadImages(for: option)
 
             await MainActor.run {
                 let images = optionWithImages.downloadedImages.compactMap { UIImage(data: $0) }
@@ -477,14 +477,15 @@ struct ScoreButton: View {
 
 struct AISearchBottomSheet: View {
     let initialQuery: String
-    let onSelect: (OpenAIService.EntryOption) -> Void
+    let onSelect: (AISearchService.EntryOption) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchQuery: String = ""
     @State private var isSearching = false
-    @State private var searchResults: [OpenAIService.EntryOption] = []
+    @State private var searchResults: [AISearchService.EntryOption] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var errorMessage: String?
+    @State private var showRateLimitAlert = false
 
     var body: some View {
         NavigationStack {
@@ -568,6 +569,13 @@ struct AISearchBottomSheet: View {
             .onDisappear {
                 stopSearch()
             }
+            .alert("Daily Limit Reached", isPresented: $showRateLimitAlert) {
+                Button("OK") {
+                    showRateLimitAlert = false
+                }
+            } message: {
+                Text("You have exceeded your daily AI search limit. Please try again tomorrow.")
+            }
         }
     }
 
@@ -580,7 +588,7 @@ struct AISearchBottomSheet: View {
 
         searchTask = Task {
             do {
-                let options = try await OpenAIService.searchOptions(for: searchQuery)
+                let options = try await AISearchService.shared.searchOptions(for: searchQuery)
 
                 if Task.isCancelled { return }
 
@@ -597,7 +605,15 @@ struct AISearchBottomSheet: View {
 
                 await MainActor.run {
                     isSearching = false
-                    errorMessage = error.localizedDescription
+
+                    // Check for rate limit error
+                    if let aiError = error as? AISearchError,
+                       case .rateLimitExceeded = aiError {
+                        showRateLimitAlert = true
+                        errorMessage = nil
+                    } else {
+                        errorMessage = error.localizedDescription
+                    }
                 }
             }
         }
@@ -611,7 +627,7 @@ struct AISearchBottomSheet: View {
 }
 
 struct AIHelperOptionCard: View {
-    let option: OpenAIService.EntryOption
+    let option: AISearchService.EntryOption
     let onTap: () -> Void
 
     var body: some View {

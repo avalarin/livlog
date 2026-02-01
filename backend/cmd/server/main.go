@@ -66,6 +66,7 @@ func main() {
 	codeRepo := repository.NewVerificationCodeRepository(db.Pool)
 	collectionRepo := repository.NewCollectionRepository(db.Pool)
 	entryRepo := repository.NewEntryRepository(db.Pool)
+	aiSearchUsageRepo := repository.NewAISearchUsageRepository(db.Pool)
 
 	// Initialize services
 	appleVerifier := service.NewAppleVerifier(cfg.Apple.BundleID)
@@ -93,11 +94,18 @@ func main() {
 	collectionService := service.NewCollectionService(collectionRepo)
 	entryService := service.NewEntryService(entryRepo, collectionRepo)
 
+	// Initialize AI search service
+	aiSearchService, err := service.NewAISearchService(cfg, aiSearchUsageRepo, userRepo, log)
+	if err != nil {
+		log.Fatal("failed to initialize AI search service", zap.Error(err))
+	}
+
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler(db)
 	authHandler := handler.NewAuthHandler(authService, emailAuthService)
 	collectionHandler := handler.NewCollectionHandler(collectionService)
 	entryHandler := handler.NewEntryHandler(entryService)
+	aiSearchHandler := handler.NewAISearchHandler(aiSearchService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -133,6 +141,9 @@ func main() {
 			// Collections and entries endpoints
 			collectionHandler.RegisterRoutes(r)
 			entryHandler.RegisterRoutes(r)
+
+			// AI search endpoint
+			aiSearchHandler.RegisterRoutes(r)
 		})
 	})
 

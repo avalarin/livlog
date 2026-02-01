@@ -29,3 +29,17 @@ jwt:
 
 apple:
   bundle_id: "net.avalarin.livlog"
+
+openrouter:
+  # OpenRouter API key for AI search
+  # Get your API key from https://openrouter.ai
+  api_key: "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"
+  base_url: "https://openrouter.ai/api/v1/chat/completions"
+  model: "perplexity/sonar"
+
+ratelimit:
+  # AI search rate limits by policy
+  ai_search_basic_limit: 5  # Number of AI searches for basic users
+  ai_search_pro_limit: 50  # Number of AI searches for pro users
+  ai_search_unlimited_limit: 0  # 0 means no limit for unlimited users
+  ai_search_period: "24h"  # Period duration (e.g., "24h", "1h", "30m")
