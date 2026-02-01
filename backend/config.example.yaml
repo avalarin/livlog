@@ -33,7 +33,7 @@ apple:
 openrouter:
   # OpenRouter API key for AI search
   # Get your API key from https://openrouter.ai
-  api_key: "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"
+  api_key: "sk-"
   base_url: "https://openrouter.ai/api/v1/chat/completions"
   model: "perplexity/sonar"
 
