@@ -33,29 +33,32 @@ Authentication via Apple Sign In.
 **Request:**
 ```json
 {
-  "identityToken": "eyJraWQiOiJXNldjT0...",
-  "authorizationCode": "c1234567890abcdef...",
-  "fullName": {
-    "givenName": "John",
-    "familyName": "Doe"
+  "identity_token": "eyJraWQiOiJXNldjT0...",
+  "authorization_code": "c1234567890abcdef...",
+  "full_name": {
+    "given_name": "John",
+    "family_name": "Doe"
   },
   "email": "user@example.com"
 }
 ```
 
-**Note:** `fullName` and `email` are only provided on the first authorization.
+**Note:** `full_name` and `email` are only provided on the first authorization. All fields except `identity_token` are optional.
 
 **Response (200):**
 ```json
 {
-  "accessToken": "eyJhbGciOiJSUzI1NiIs...",
-  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2g...",
-  "expiresIn": 3600,
+  "access_token": "eyJhbGciOiJSUzI1NiIs...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2g...",
+  "expires_in": 3600,
   "user": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "user@example.com",
-    "displayName": "John Doe",
-    "createdAt": "2025-01-20T10:00:00Z"
+    "email_verified": true,
+    "display_name": "John Doe",
+    "auth_providers": ["apple"],
+    "created_at": "2025-01-20T10:00:00Z",
+    "updated_at": "2025-01-20T10:00:00Z"
   }
 }
 ```
@@ -64,7 +67,7 @@ Authentication via Apple Sign In.
 ```bash
 curl -X POST https://api.livlogios.app/api/v1/auth/apple \
   -H "Content-Type: application/json" \
-  -d '{"identityToken": "eyJraWQiOiJXNldjT0..."}'
+  -d '{"identity_token": "eyJraWQiOiJXNldjT0..."}'
 ```
 
 ### POST /auth/refresh
@@ -74,16 +77,25 @@ Refresh access token using refresh token.
 **Request:**
 ```json
 {
-  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2g..."
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2g..."
 }
 ```
 
 **Response (200):**
 ```json
 {
-  "accessToken": "eyJhbGciOiJSUzI1NiIs...",
-  "refreshToken": "bmV3IHJlZnJlc2ggdG9rZW4...",
-  "expiresIn": 3600
+  "access_token": "eyJhbGciOiJSUzI1NiIs...",
+  "refresh_token": "bmV3IHJlZnJlc2ggdG9rZW4...",
+  "expires_in": 3600,
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "email_verified": true,
+    "display_name": "John Doe",
+    "auth_providers": ["apple"],
+    "created_at": "2025-01-20T10:00:00Z",
+    "updated_at": "2025-01-20T10:00:00Z"
+  }
 }
 ```
 
@@ -91,7 +103,7 @@ Refresh access token using refresh token.
 ```bash
 curl -X POST https://api.livlogios.app/api/v1/auth/refresh \
   -H "Content-Type: application/json" \
-  -d '{"refreshToken": "dGhpcyBpcyBhIHJlZnJlc2g..."}'
+  -d '{"refresh_token": "dGhpcyBpcyBhIHJlZnJlc2g..."}'
 ```
 
 ### POST /auth/logout
@@ -106,11 +118,16 @@ Authorization: Bearer <access_token>
 **Request:**
 ```json
 {
-  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2g..."
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2g..."
 }
 ```
 
-**Response (204):** No Content
+**Response (200):**
+```json
+{
+  "message": "Logged out successfully"
+}
+```
 
 ### GET /auth/me
 
@@ -126,23 +143,29 @@ Authorization: Bearer <access_token>
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "email": "user@example.com",
-  "displayName": "John Doe",
-  "emailVerified": true,
-  "authProviders": ["apple"],
-  "createdAt": "2025-01-20T10:00:00Z"
+  "email_verified": true,
+  "display_name": "John Doe",
+  "auth_providers": ["apple"],
+  "created_at": "2025-01-20T10:00:00Z",
+  "updated_at": "2025-01-20T10:00:00Z"
 }
 ```
 
 ### DELETE /auth/account
 
-Delete user account.
+Delete user account (soft delete).
 
 **Headers:**
 ```
 Authorization: Bearer <access_token>
 ```
 
-**Response (204):** No Content
+**Response (200):**
+```json
+{
+  "message": "Account deleted successfully"
+}
+```
 
 ---
 

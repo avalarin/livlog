@@ -8,7 +8,11 @@
       "Bash(go build:*)",
       "Bash(go vet:*)",
       "Bash(gofmt:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(go mod download:*)",
+      "Bash(go get:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)"
     ]
   }
 }

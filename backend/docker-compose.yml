@@ -13,6 +13,8 @@ services:
       - LIVLOG_DATABASE_PASSWORD=livlog
       - LIVLOG_DATABASE_SSLMODE=disable
       - LIVLOG_LOGGING_FORMAT=json
+    volumes:
+      - ./keys:/app/keys:ro
     depends_on:
       postgres:
         condition: service_healthy

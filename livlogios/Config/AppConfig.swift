@@ -48,4 +48,8 @@ struct AppConfig {
     static var healthCheckURL: URL? {
         current.healthCheckURL
     }
+
+    static var baseURL: String {
+        "\(backendBaseURL)/api/v1"
+    }
 }

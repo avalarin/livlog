@@ -19,6 +19,7 @@ import (
 	"github.com/avalarin/livlog/backend/internal/logger"
 	"github.com/avalarin/livlog/backend/internal/middleware"
 	"github.com/avalarin/livlog/backend/internal/repository"
+	"github.com/avalarin/livlog/backend/internal/service"
 )
 
 func main() {
@@ -60,8 +61,35 @@ func main() {
 	}
 	defer db.Close()
 
+	// Initialize repositories
+	userRepo := repository.NewUserRepository(db.Pool)
+	codeRepo := repository.NewVerificationCodeRepository(db.Pool)
+
+	// Initialize services
+	appleVerifier := service.NewAppleVerifier(cfg.Apple.BundleID)
+	jwtService, err := service.NewJWTService(
+		cfg.JWT.PrivateKeyPath,
+		cfg.JWT.PublicKeyPath,
+		cfg.JWT.AccessTokenLifetime,
+		cfg.JWT.RefreshTokenLifetime,
+		cfg.JWT.Issuer,
+		cfg.JWT.Audience,
+	)
+	if err != nil {
+		log.Fatal("failed to initialize JWT service", zap.Error(err))
+	}
+
+	authService := service.NewAuthService(userRepo, appleVerifier, jwtService)
+
+	// Initialize rate limiter for email auth (60 second window)
+	rateLimiter := service.NewRateLimiter(60 * time.Second)
+
+	// Initialize email auth service
+	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, jwtService, rateLimiter)
+
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler(db)
+	authHandler := handler.NewAuthHandler(authService, emailAuthService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -78,8 +106,49 @@ func main() {
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
+		// Public routes
 		r.Get("/health", healthHandler.Health)
+		r.Post("/auth/apple", authHandler.AppleAuth)
+		r.Post("/auth/email/send-code", authHandler.SendVerificationCode)
+		r.Post("/auth/email/resend-code", authHandler.ResendVerificationCode)
+		r.Post("/auth/email/verify", authHandler.VerifyEmailCode)
+		r.Post("/auth/refresh", authHandler.RefreshToken)
+
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthMiddleware(jwtService))
+
+			r.Get("/auth/me", authHandler.GetMe)
+			r.Post("/auth/logout", authHandler.Logout)
+			r.Delete("/auth/account", authHandler.DeleteAccount)
+
+			// Future: collections, entries endpoints will be added here
+		})
 	})
+
+	// Start cleanup goroutine for expired verification codes and rate limiter
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				// Cleanup rate limiter
+				rateLimiter.Cleanup()
+
+				// Cleanup expired verification codes (older than 24 hours)
+				deleted, err := codeRepo.CleanupExpiredCodes(ctx, 24*time.Hour)
+				if err != nil {
+					log.Error("failed to cleanup verification codes", zap.Error(err))
+				} else if deleted > 0 {
+					log.Info("cleaned up verification codes", zap.Int64("deleted", deleted))
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	// Create HTTP server
 	server := &http.Server{

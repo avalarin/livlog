@@ -145,7 +145,7 @@ from jwt import PyJWKClient
 
 APPLE_PUBLIC_KEY_URL = "https://appleid.apple.com/auth/keys"
 APPLE_TOKEN_ISSUER = "https://appleid.apple.com"
-APP_BUNDLE_ID = "net.avalarin.livlogios"
+APP_BUNDLE_ID = "net.avalarin.livlog"
 
 async def verify_apple_token(identity_token: str) -> dict:
     """
@@ -193,7 +193,7 @@ async function verifyAppleToken(identityToken) {
   const payload = jwt.verify(identityToken, key.getPublicKey(), {
     algorithms: ['RS256'],
     issuer: 'https://appleid.apple.com',
-    audience: 'net.avalarin.livlogios'
+    audience: 'net.avalarin.livlog'
   });
 
   return {
@@ -672,7 +672,7 @@ When adding email auth:
 import Security
 
 class KeychainManager {
-    private static let service = "net.avalarin.livlogios"
+    private static let service = "net.avalarin.livlog"
 
     static func save(accessToken: String) {
         save(key: "accessToken", value: accessToken)

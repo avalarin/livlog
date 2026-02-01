@@ -42,7 +42,7 @@ docker-build:
 
 # Start services with docker-compose
 docker-up:
-    docker compose up -d
+    docker compose up -d --build
 
 # Stop services with docker-compose
 docker-down:
@@ -75,3 +75,15 @@ migrate-create name:
 clean:
     rm -rf bin/
     rm -f coverage.out coverage.html
+
+# Generate RSA keys for JWT signing (development only)
+generate-keys:
+    mkdir -p keys
+    openssl genrsa -out keys/private_key.pem 2048
+    openssl rsa -in keys/private_key.pem -pubout -out keys/public_key.pem
+    chmod 600 keys/private_key.pem
+    @echo "✓ RSA keys generated in keys/ directory"
+
+# Setup auth (generate keys and run auth migrations)
+setup-auth: generate-keys
+    @echo "✓ Auth setup complete"

@@ -114,50 +114,6 @@
             endingLineNumber = "42"
             landmarkName = "searchArtwork(query:mediaType:limit:)"
             landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "6C07B7BF-2F1F-4D89-B3FC-D2ECFCE6A058 - f2f332be1b5638f9"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "(1) suspend resume partial function for static livlogios.iTunesSearchService.searchArtwork(query: Swift.String, mediaType: livlogios.iTunesSearchService.MediaType, limit: Swift.Int) async -&gt; Swift.Array&lt;Swift.String&gt;"
-                  moduleName = "livlogios.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/avprokopev/Projects/livlogios/livlogios/OpenAIService.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "43"
-                  endingLineNumber = "43">
-               </Location>
-               <Location
-                  uuid = "6C07B7BF-2F1F-4D89-B3FC-D2ECFCE6A058 - 3db269a23ea4379a"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "(2) await resume partial function for static livlogios.iTunesSearchService.searchArtwork(query: Swift.String, mediaType: livlogios.iTunesSearchService.MediaType, limit: Swift.Int) async -&gt; Swift.Array&lt;Swift.String&gt;"
-                  moduleName = "livlogios.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/avprokopev/Projects/livlogios/livlogios/OpenAIService.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "43"
-                  endingLineNumber = "43">
-               </Location>
-               <Location
-                  uuid = "6C07B7BF-2F1F-4D89-B3FC-D2ECFCE6A058 - 80667ecf111dd2fe"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "(4) suspend resume partial function for static livlogios.iTunesSearchService.searchArtwork(query: Swift.String, mediaType: livlogios.iTunesSearchService.MediaType, limit: Swift.Int) async -&gt; Swift.Array&lt;Swift.String&gt;"
-                  moduleName = "livlogios.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/avprokopev/Projects/livlogios/livlogios/OpenAIService.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "43"
-                  endingLineNumber = "43">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

@@ -18,3 +18,14 @@ database:
 logging:
   # Format: "json" for production (structured logging), "console" for development
   format: "console"
+
+jwt:
+  private_key_path: "./keys/private_key.pem"
+  public_key_path: "./keys/public_key.pem"
+  access_token_lifetime: 3600  # 1 hour in seconds
+  refresh_token_lifetime: 2592000  # 30 days in seconds
+  issuer: "livlog-api"
+  audience: "livlog-app"
+
+apple:
+  bundle_id: "net.avalarin.livlog"

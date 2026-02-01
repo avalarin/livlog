@@ -11,6 +11,8 @@ type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Logging  LoggingConfig  `mapstructure:"logging"`
+	JWT      JWTConfig      `mapstructure:"jwt"`
+	Apple    AppleConfig    `mapstructure:"apple"`
 }
 
 type ServerConfig struct {
@@ -29,6 +31,19 @@ type DatabaseConfig struct {
 
 type LoggingConfig struct {
 	Format string `mapstructure:"format"` // "json" or "console"
+}
+
+type JWTConfig struct {
+	PrivateKeyPath       string `mapstructure:"private_key_path"`
+	PublicKeyPath        string `mapstructure:"public_key_path"`
+	AccessTokenLifetime  int    `mapstructure:"access_token_lifetime"`
+	RefreshTokenLifetime int    `mapstructure:"refresh_token_lifetime"`
+	Issuer               string `mapstructure:"issuer"`
+	Audience             string `mapstructure:"audience"`
+}
+
+type AppleConfig struct {
+	BundleID string `mapstructure:"bundle_id"`
 }
 
 func (s *ServerConfig) Address() string {
@@ -60,6 +75,13 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("database.password", "livlog")
 	v.SetDefault("database.sslmode", "disable")
 	v.SetDefault("logging.format", "console")
+	v.SetDefault("jwt.private_key_path", "./keys/private_key.pem")
+	v.SetDefault("jwt.public_key_path", "./keys/public_key.pem")
+	v.SetDefault("jwt.access_token_lifetime", 3600)
+	v.SetDefault("jwt.refresh_token_lifetime", 2592000)
+	v.SetDefault("jwt.issuer", "livlog-api")
+	v.SetDefault("jwt.audience", "livlog-app")
+	v.SetDefault("apple.bundle_id", "net.avalarin.livlog")
 
 	// Read config file
 	if configPath != "" {

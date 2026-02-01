@@ -11,6 +11,7 @@ import SwiftUI
 @main
 struct livlogiosApp: App {
     @StateObject private var connectionMonitor = ConnectionMonitor.shared
+    @StateObject private var appState = AppState()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -28,12 +29,23 @@ struct livlogiosApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .connectionToast(monitor: connectionMonitor)
-                .onAppear {
+            Group {
+                if appState.isCheckingAuth {
+                    ProgressView()
+                } else if appState.isAuthenticated {
+                    ContentView()
+                        .connectionToast(monitor: connectionMonitor)
+                } else {
+                    LoginView()
+                }
+            }
+            .environmentObject(appState)
+            .onAppear {
+                if appState.isAuthenticated {
                     createDefaultCollectionsIfNeeded()
                     connectionMonitor.startMonitoring()
                 }
+            }
         }
         .modelContainer(sharedModelContainer)
     }
