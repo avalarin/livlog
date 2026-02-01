@@ -5,31 +5,43 @@
 //  Created by avprokopev on 14.01.2026.
 //
 
-import SwiftData
 import SwiftUI
 
 struct CollectionsView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Collection.createdAt) private var collections: [Collection]
-    
+
+    @State private var collections: [CollectionModel] = []
+    @State private var entries: [EntryModel] = []
     @State private var showingAddCollection = false
-    @State private var editingCollection: Collection?
+    @State private var editingCollection: CollectionModel?
     @State private var showingDeleteAlert = false
-    @State private var collectionToDelete: Collection?
+    @State private var collectionToDelete: CollectionModel?
+
+    @State private var isLoading = false
+    @State private var isCreatingDefaults = false
+    @State private var errorMessage: String?
+    @State private var showError = false
     
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(collections) { collection in
-                    CollectionRow(
-                        collection: collection,
-                        onEdit: { editingCollection = collection },
-                        onDelete: {
-                            collectionToDelete = collection
-                            showingDeleteAlert = true
+            Group {
+                if isLoading {
+                    ProgressView()
+                } else {
+                    List {
+                        ForEach(collections) { collection in
+                            let entryCount = entries.filter { $0.collectionID == collection.id }.count
+                            CollectionRow(
+                                collection: collection,
+                                entryCount: entryCount,
+                                onEdit: { editingCollection = collection },
+                                onDelete: {
+                                    collectionToDelete = collection
+                                    showingDeleteAlert = true
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
             .navigationTitle("Collections")
@@ -51,9 +63,19 @@ struct CollectionsView: View {
             }
             .sheet(isPresented: $showingAddCollection) {
                 AddEditCollectionView(mode: .add)
+                    .onDisappear {
+                        Task {
+                            await loadData()
+                        }
+                    }
             }
             .sheet(item: $editingCollection) { collection in
                 AddEditCollectionView(mode: .edit(collection))
+                    .onDisappear {
+                        Task {
+                            await loadData()
+                        }
+                    }
             }
             .alert("Delete Collection", isPresented: $showingDeleteAlert) {
                 Button("Cancel", role: .cancel) {
@@ -61,41 +83,115 @@ struct CollectionsView: View {
                 }
                 Button("Delete", role: .destructive) {
                     if let collection = collectionToDelete {
-                        deleteCollection(collection)
+                        Task {
+                            await deleteCollection(collection)
+                        }
                     }
                 }
             } message: {
                 if let collection = collectionToDelete {
-                    Text("Delete \"\(collection.name)\" and all its \(collection.items.count) entries? This cannot be undone.")
+                    let entryCount = entries.filter { $0.collectionID == collection.id }.count
+                    Text("Delete \"\(collection.name)\" and all its \(entryCount) entries? This cannot be undone.")
                 }
             }
             .overlay {
-                if collections.isEmpty {
+                if collections.isEmpty && !isLoading {
                     ContentUnavailableView {
                         Label("No Collections", systemImage: "folder")
                     } description: {
                         Text("Create a collection to organize your entries")
                     } actions: {
-                        Button("Add Collection") {
-                            showingAddCollection = true
+                        VStack(spacing: 12) {
+                            Button {
+                                Task {
+                                    await createDefaultCollections()
+                                }
+                            } label: {
+                                if isCreatingDefaults {
+                                    ProgressView()
+                                } else {
+                                    Text("Create Default Collections")
+                                }
+                            }
+                            .disabled(isCreatingDefaults)
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Add Custom Collection") {
+                                showingAddCollection = true
+                            }
                         }
                     }
                 }
             }
+            .task {
+                await loadData()
+            }
+            .alert("Error", isPresented: $showError) {
+                Button("OK") {
+                    errorMessage = nil
+                }
+            } message: {
+                if let errorMessage = errorMessage {
+                    Text(errorMessage)
+                }
+            }
         }
     }
-    
-    private func deleteCollection(_ collection: Collection) {
-        modelContext.delete(collection)
+
+    private func loadData() async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            async let collectionsTask = CollectionService.shared.getCollections()
+            async let entriesTask = EntryService.shared.getEntries()
+
+            collections = try await collectionsTask
+            entries = try await entriesTask
+        } catch {
+            errorMessage = "Failed to load data: \(error.localizedDescription)"
+            showError = true
+        }
+
+        isLoading = false
+    }
+
+    private func createDefaultCollections() async {
+        isCreatingDefaults = true
+        errorMessage = nil
+
+        do {
+            _ = try await CollectionService.shared.createDefaultCollections()
+            await loadData()
+        } catch {
+            errorMessage = "Failed to create default collections: \(error.localizedDescription)"
+            showError = true
+        }
+
+        isCreatingDefaults = false
+    }
+
+    private func deleteCollection(_ collection: CollectionModel) async {
+        errorMessage = nil
+
+        do {
+            try await CollectionService.shared.deleteCollection(id: collection.id)
+            await loadData()
+        } catch {
+            errorMessage = "Failed to delete collection: \(error.localizedDescription)"
+            showError = true
+        }
+
         collectionToDelete = nil
     }
 }
 
 struct CollectionRow: View {
-    let collection: Collection
+    let collection: CollectionModel
+    let entryCount: Int
     let onEdit: () -> Void
     let onDelete: () -> Void
-    
+
     var body: some View {
         HStack(spacing: 12) {
             Text(collection.icon)
@@ -103,16 +199,16 @@ struct CollectionRow: View {
                 .frame(width: 44, height: 44)
                 .background(Color.accentColor.opacity(0.15))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(collection.name)
                     .font(.headline)
-                
-                Text("\(collection.items.count) entries")
+
+                Text("\(entryCount) entries")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            
+
             Spacer()
         }
         .contentShape(Rectangle())
@@ -120,7 +216,7 @@ struct CollectionRow: View {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }
-            
+
             Button(action: onEdit) {
                 Label("Edit", systemImage: "pencil")
             }
@@ -132,23 +228,25 @@ struct CollectionRow: View {
 struct AddEditCollectionView: View {
     enum Mode: Identifiable {
         case add
-        case edit(Collection)
-        
+        case edit(CollectionModel)
+
         var id: String {
             switch self {
             case .add: return "add"
-            case .edit(let c): return "edit-\(ObjectIdentifier(c))"
+            case .edit(let c): return "edit-\(c.id)"
             }
         }
     }
-    
+
     let mode: Mode
-    
-    @Environment(\.modelContext) private var modelContext
+
     @Environment(\.dismiss) private var dismiss
-    
+
     @State private var name: String = ""
     @State private var selectedIcon: String = "📁"
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    @State private var showError = false
     
     private let emojiOptions = [
         "📁", "🎬", "📚", "🎮", "🎵", "🎨", "🍿", "📺", "🎭", "🎪",
@@ -222,10 +320,18 @@ struct AddEditCollectionView: View {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveCollection()
+                    Button {
+                        Task {
+                            await saveCollection()
+                        }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text("Save")
+                        }
                     }
-                    .disabled(name.isEmpty)
+                    .disabled(name.isEmpty || isSaving)
                 }
             }
             .onAppear {
@@ -234,23 +340,38 @@ struct AddEditCollectionView: View {
                     selectedIcon = collection.icon
                 }
             }
+            .alert("Error", isPresented: $showError) {
+                Button("OK") {
+                    errorMessage = nil
+                }
+            } message: {
+                if let errorMessage = errorMessage {
+                    Text(errorMessage)
+                }
+            }
         }
     }
-    
-    private func saveCollection() {
-        switch mode {
-        case .add:
-            let collection = Collection(name: name, icon: selectedIcon)
-            modelContext.insert(collection)
-        case .edit(let collection):
-            collection.name = name
-            collection.icon = selectedIcon
+
+    private func saveCollection() async {
+        isSaving = true
+        errorMessage = nil
+
+        do {
+            switch mode {
+            case .add:
+                _ = try await CollectionService.shared.createCollection(name: name, icon: selectedIcon)
+            case .edit(let collection):
+                _ = try await CollectionService.shared.updateCollection(id: collection.id, name: name, icon: selectedIcon)
+            }
+            dismiss()
+        } catch {
+            errorMessage = "Failed to save collection: \(error.localizedDescription)"
+            showError = true
+            isSaving = false
         }
-        dismiss()
     }
 }
 
 #Preview {
     CollectionsView()
-        .modelContainer(for: [Collection.self, Item.self], inMemory: true)
 }

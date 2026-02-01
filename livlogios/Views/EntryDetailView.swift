@@ -5,24 +5,30 @@
 //  Created by avprokopev on 31.12.2025.
 //
 
-import SwiftData
 import SwiftUI
 
 struct EntryDetailView: View {
-    let item: Item
-    @Environment(\.modelContext) private var modelContext
+    let entryID: String
+
     @Environment(\.dismiss) private var dismiss
+
+    @State private var entry: EntryModel?
+    @State private var collection: CollectionModel?
+    @State private var images: [UIImage] = []
+
     @State private var showingDeleteAlert = false
     @State private var showingEditSheet = false
     @State private var selectedImageIndex: Int = 0
-    
-    private var images: [UIImage] {
-        item.images.compactMap { UIImage(data: $0) }
-    }
-    
+
+    @State private var isLoading = false
+    @State private var isDeleting = false
+    @State private var errorMessage: String?
+    @State private var showError = false
+
     private var metadataItems: [(key: String, value: String)] {
+        guard let entry = entry else { return [] }
         let fieldOrder = ["Year", "Genre", "Author", "Platform"]
-        return item.additionalFields.sorted { a, b in
+        return entry.additionalFields.sorted { a, b in
             let indexA = fieldOrder.firstIndex(of: a.key) ?? Int.max
             let indexB = fieldOrder.firstIndex(of: b.key) ?? Int.max
             return indexA < indexB
@@ -30,85 +36,89 @@ struct EntryDetailView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                // Image Gallery
-                if !images.isEmpty {
-                    TabView(selection: $selectedImageIndex) {
-                        ForEach(Array(images.enumerated()), id: \.offset) { index, image in
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 300)
-                                .clipped()
-                                .tag(index)
-                        }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: images.count > 1 ? .always : .never))
-                    .frame(height: 300)
-                } else {
-                    // Placeholder
-                    LinearGradient(
-                        colors: [
-                            Color.accentColor.opacity(0.3),
-                            Color.accentColor.opacity(0.1)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .frame(height: 200)
-                    .overlay(
-                        Text(item.collection?.icon ?? "📝")
-                            .font(.system(size: 80))
-                            .opacity(0.5)
-                    )
-                }
-                
-                VStack(alignment: .leading, spacing: 20) {
-                    // Header
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            // Collection badge
-                            if let collection = item.collection {
-                                HStack(spacing: 6) {
-                                    Text(collection.icon)
-                                    Text(collection.name)
-                                        .fontWeight(.medium)
+        Group {
+            if isLoading {
+                ProgressView()
+            } else if let entry = entry {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Image Gallery
+                        if !images.isEmpty {
+                            TabView(selection: $selectedImageIndex) {
+                                ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 300)
+                                        .clipped()
+                                        .tag(index)
                                 }
-                                .font(.subheadline)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.accentColor.opacity(0.15))
-                                .clipShape(Capsule())
                             }
-                            
-                            // Title
-                            Text(item.title)
-                                .font(.title)
-                                .fontWeight(.bold)
+                            .tabViewStyle(.page(indexDisplayMode: images.count > 1 ? .always : .never))
+                            .frame(height: 300)
+                        } else {
+                            // Placeholder
+                            LinearGradient(
+                                colors: [
+                                    Color.accentColor.opacity(0.3),
+                                    Color.accentColor.opacity(0.1)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .frame(height: 200)
+                            .overlay(
+                                Text(collection?.icon ?? "📝")
+                                    .font(.system(size: 80))
+                                    .opacity(0.5)
+                            )
                         }
-                        
-                        Spacer()
-                        
-                        // Score
-                        VStack(spacing: 4) {
-                            Text(item.score.emoji)
-                                .font(.system(size: 48))
-                            Text(item.score.label)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    
-                    // Date
-                    HStack(spacing: 6) {
-                        Image(systemName: "calendar")
-                            .foregroundStyle(.secondary)
-                        Text(item.date, format: .dateTime.day().month(.wide).year())
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.subheadline)
+                
+                        VStack(alignment: .leading, spacing: 20) {
+                            // Header
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    // Collection badge
+                                    if let collection = collection {
+                                        HStack(spacing: 6) {
+                                            Text(collection.icon)
+                                            Text(collection.name)
+                                                .fontWeight(.medium)
+                                        }
+                                        .font(.subheadline)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Color.accentColor.opacity(0.15))
+                                        .clipShape(Capsule())
+                                    }
+
+                                    // Title
+                                    Text(entry.title)
+                                        .font(.title)
+                                        .fontWeight(.bold)
+                                }
+
+                                Spacer()
+
+                                // Score
+                                VStack(spacing: 4) {
+                                    Text(entry.score.emoji)
+                                        .font(.system(size: 48))
+                                    Text(entry.score.label)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            // Date
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .foregroundStyle(.secondary)
+                                Text(entry.date, format: .dateTime.day().month(.wide).year())
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline)
                     
                     // Additional Fields
                     if !metadataItems.isEmpty {
@@ -138,80 +148,133 @@ struct EntryDetailView: View {
                         }
                     }
                     
-                    // Description
-                    if !item.entryDescription.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Notes")
-                                .font(.headline)
-                            
-                            Text(item.entryDescription)
-                                .font(.body)
-                                .foregroundStyle(.secondary)
+                            // Description
+                            if !entry.description.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Notes")
+                                        .font(.headline)
+
+                                    Text(entry.description)
+                                        .font(.body)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            // Created date
+                            HStack {
+                                Spacer()
+                                Text("Added \(entry.createdAt, format: .dateTime.day().month().year())")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.top, 20)
                         }
-                    }
-                    
-                    // Created date
-                    HStack {
-                        Spacer()
-                        Text("Added \(item.createdAt, format: .dateTime.day().month().year())")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.top, 20)
-                }
-                .padding(20)
-            }
-        }
-        .ignoresSafeArea(edges: .top)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 12) {
-                    Button {
-                        showingEditSheet = true
-                    } label: {
-                        Image(systemName: "pencil.circle")
-                    }
-                    
-                    Menu {
-                        Button(role: .destructive) {
-                            showingDeleteAlert = true
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+                        .padding(20)
                     }
                 }
+                .ignoresSafeArea(edges: .top)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        HStack(spacing: 12) {
+                            Button {
+                                showingEditSheet = true
+                            } label: {
+                                Image(systemName: "pencil.circle")
+                            }
+
+                            Menu {
+                                Button(role: .destructive) {
+                                    showingDeleteAlert = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                            }
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingEditSheet) {
+                    AddEntryView(editingEntryID: entryID)
+                }
+                .alert("Delete Entry", isPresented: $showingDeleteAlert) {
+                    Button("Cancel", role: .cancel) { }
+                    Button("Delete", role: .destructive) {
+                        Task {
+                            await deleteEntry()
+                        }
+                    }
+                } message: {
+                    Text("Are you sure you want to delete \"\(entry.title)\"?")
+                }
+            } else {
+                Text("Entry not found")
             }
         }
-        .sheet(isPresented: $showingEditSheet) {
-            AddEntryView(editingItem: item)
+        .task {
+            await loadEntry()
         }
-        .alert("Delete Entry", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                modelContext.delete(item)
-                dismiss()
+        .alert("Error", isPresented: $showError) {
+            Button("OK") {
+                errorMessage = nil
             }
         } message: {
-            Text("Are you sure you want to delete \"\(item.title)\"?")
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+            }
+        }
+    }
+
+    private func loadEntry() async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            // Load entry
+            entry = try await EntryService.shared.getEntry(id: entryID)
+
+            // Load collection if needed
+            if let collectionID = entry?.collectionID {
+                let collections = try await CollectionService.shared.getCollections()
+                collection = collections.first { $0.id == collectionID }
+            }
+
+            // Load images
+            let entryImages = try await EntryService.shared.getEntryImages(entryID: entryID)
+            let sortedImages = entryImages.sorted { $0.position < $1.position }
+            images = sortedImages.compactMap { imageModel in
+                guard let data = Data(base64Encoded: imageModel.data),
+                      let uiImage = UIImage(data: data) else {
+                    return nil
+                }
+                return uiImage
+            }
+        } catch {
+            errorMessage = "Failed to load entry: \(error.localizedDescription)"
+            showError = true
+        }
+
+        isLoading = false
+    }
+
+    private func deleteEntry() async {
+        isDeleting = true
+        errorMessage = nil
+
+        do {
+            try await EntryService.shared.deleteEntry(id: entryID)
+            dismiss()
+        } catch {
+            errorMessage = "Failed to delete entry: \(error.localizedDescription)"
+            showError = true
+            isDeleting = false
         }
     }
 }
 
 #Preview {
     NavigationStack {
-        EntryDetailView(
-            item: Item(
-                collection: nil,
-                title: "Inception",
-                entryDescription: "A mind-bending masterpiece by Christopher Nolan. The film explores the concept of dream invasion and features stunning visual effects.",
-                score: .great,
-                date: Date(),
-                additionalFields: ["Year": "2010", "Genre": "Sci-Fi, Thriller"]
-            )
-        )
+        EntryDetailView(entryID: "preview-id")
     }
-    .modelContainer(for: [Collection.self, Item.self], inMemory: true)
 }

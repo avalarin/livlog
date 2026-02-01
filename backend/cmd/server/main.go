@@ -64,6 +64,8 @@ func main() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db.Pool)
 	codeRepo := repository.NewVerificationCodeRepository(db.Pool)
+	collectionRepo := repository.NewCollectionRepository(db.Pool)
+	entryRepo := repository.NewEntryRepository(db.Pool)
 
 	// Initialize services
 	appleVerifier := service.NewAppleVerifier(cfg.Apple.BundleID)
@@ -87,9 +89,15 @@ func main() {
 	// Initialize email auth service
 	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, jwtService, rateLimiter)
 
+	// Initialize collection and entry services
+	collectionService := service.NewCollectionService(collectionRepo)
+	entryService := service.NewEntryService(entryRepo, collectionRepo)
+
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler(db)
 	authHandler := handler.NewAuthHandler(authService, emailAuthService)
+	collectionHandler := handler.NewCollectionHandler(collectionService)
+	entryHandler := handler.NewEntryHandler(entryService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -122,7 +130,9 @@ func main() {
 			r.Post("/auth/logout", authHandler.Logout)
 			r.Delete("/auth/account", authHandler.DeleteAccount)
 
-			// Future: collections, entries endpoints will be added here
+			// Collections and entries endpoints
+			collectionHandler.RegisterRoutes(r)
+			entryHandler.RegisterRoutes(r)
 		})
 	})
 

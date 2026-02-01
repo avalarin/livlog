@@ -1,0 +1,247 @@
+//
+//  EntryService.swift
+//  livlogios
+//
+//  Created by Claude Code on 01.02.2026.
+//
+
+import Foundation
+
+actor EntryService {
+    static let shared = EntryService()
+
+    private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
+
+    private init() {
+        self.decoder = JSONDecoder()
+        self.encoder = JSONEncoder()
+    }
+
+    // MARK: - Get Entries
+
+    func getEntries(collectionID: String? = nil, limit: Int = 50, offset: Int = 0) async throws -> [EntryModel] {
+        var queryItems = [
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            URLQueryItem(name: "offset", value: "\(offset)")
+        ]
+
+        if let collectionID = collectionID {
+            queryItems.append(URLQueryItem(name: "collection_id", value: collectionID))
+        }
+
+        var components = URLComponents()
+        components.queryItems = queryItems
+        let queryString = components.url?.query ?? ""
+
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries?\(queryString)",
+            method: "GET"
+        )
+
+        return try decoder.decode([EntryModel].self, from: data)
+    }
+
+    // MARK: - Search Entries
+
+    func searchEntries(query: String, limit: Int = 50, offset: Int = 0) async throws -> [EntryModel] {
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            URLQueryItem(name: "offset", value: "\(offset)")
+        ]
+        let queryString = components.url?.query ?? ""
+
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries/search?\(queryString)",
+            method: "GET"
+        )
+
+        return try decoder.decode([EntryModel].self, from: data)
+    }
+
+    // MARK: - Get Entry
+
+    func getEntry(id: String) async throws -> EntryModel {
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries/\(id)",
+            method: "GET"
+        )
+
+        return try decoder.decode(EntryModel.self, from: data)
+    }
+
+    // MARK: - Create Entry
+
+    func createEntry(
+        collectionID: String?,
+        title: String,
+        description: String,
+        score: ScoreRating,
+        date: Date,
+        additionalFields: [String: String],
+        imageData: [Data]
+    ) async throws -> EntryModel {
+        struct ImageData: Codable {
+            let data: String
+            let isCover: Bool
+            let position: Int
+
+            enum CodingKeys: String, CodingKey {
+                case data
+                case isCover = "is_cover"
+                case position
+            }
+        }
+
+        struct Request: Codable {
+            let collectionID: String?
+            let title: String
+            let description: String
+            let score: Int
+            let date: String
+            let additionalFields: [String: String]
+            let images: [ImageData]
+
+            enum CodingKeys: String, CodingKey {
+                case collectionID = "collection_id"
+                case title
+                case description
+                case score
+                case date
+                case additionalFields = "additional_fields"
+                case images
+            }
+        }
+
+        // Convert images to base64
+        let images = imageData.enumerated().map { index, data in
+            ImageData(
+                data: data.base64EncodedString(),
+                isCover: index == 0,
+                position: index
+            )
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        let request = Request(
+            collectionID: collectionID,
+            title: title,
+            description: description,
+            score: score.rawValue,
+            date: dateFormatter.string(from: date),
+            additionalFields: additionalFields,
+            images: images
+        )
+
+        let bodyData = try encoder.encode(request)
+
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries",
+            method: "POST",
+            body: bodyData
+        )
+
+        return try decoder.decode(EntryModel.self, from: data)
+    }
+
+    // MARK: - Update Entry
+
+    func updateEntry(
+        id: String,
+        collectionID: String?,
+        title: String,
+        description: String,
+        score: ScoreRating,
+        date: Date,
+        additionalFields: [String: String],
+        imageData: [Data]?
+    ) async throws -> EntryModel {
+        struct ImageData: Codable {
+            let data: String
+            let isCover: Bool
+            let position: Int
+
+            enum CodingKeys: String, CodingKey {
+                case data
+                case isCover = "is_cover"
+                case position
+            }
+        }
+
+        struct Request: Codable {
+            let collectionID: String?
+            let title: String
+            let description: String
+            let score: Int
+            let date: String
+            let additionalFields: [String: String]
+            let images: [ImageData]?
+
+            enum CodingKeys: String, CodingKey {
+                case collectionID = "collection_id"
+                case title
+                case description
+                case score
+                case date
+                case additionalFields = "additional_fields"
+                case images
+            }
+        }
+
+        // Convert images to base64 if provided
+        let images: [ImageData]? = imageData?.enumerated().map { index, data in
+            ImageData(
+                data: data.base64EncodedString(),
+                isCover: index == 0,
+                position: index
+            )
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        let request = Request(
+            collectionID: collectionID,
+            title: title,
+            description: description,
+            score: score.rawValue,
+            date: dateFormatter.string(from: date),
+            additionalFields: additionalFields,
+            images: images
+        )
+
+        let bodyData = try encoder.encode(request)
+
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries/\(id)",
+            method: "PUT",
+            body: bodyData
+        )
+
+        return try decoder.decode(EntryModel.self, from: data)
+    }
+
+    // MARK: - Delete Entry
+
+    func deleteEntry(id: String) async throws {
+        _ = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries/\(id)",
+            method: "DELETE"
+        )
+    }
+
+    // MARK: - Get Entry Images
+
+    func getEntryImages(entryID: String) async throws -> [EntryImage] {
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries/\(entryID)/images",
+            method: "GET"
+        )
+
+        return try decoder.decode([EntryImage].self, from: data)
+    }
+}

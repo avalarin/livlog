@@ -6,29 +6,27 @@
 //
 
 import PhotosUI
-import SwiftData
 import SwiftUI
 
 struct AddEntryView: View {
     enum FocusedField: Hashable { case title, notes }
-    
-    @Environment(\.modelContext) private var modelContext
+
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Collection.createdAt) private var collections: [Collection]
-    
-    /// Item to edit (nil for new entry)
-    var editingItem: Item?
-    
-    var isEditing: Bool { editingItem != nil }
-    
-    @State private var selectedCollection: Collection?
+
+    /// Entry ID to edit (nil for new entry)
+    var editingEntryID: String?
+
+    var isEditing: Bool { editingEntryID != nil }
+
+    @State private var collections: [CollectionModel] = []
+    @State private var selectedCollection: CollectionModel?
     @State private var title: String = ""
     @State private var entryDescription: String = ""
     @State private var score: ScoreRating = .undecided
     @State private var date: Date = Date()
 
     @FocusState private var focus: FocusedField?
-    
+
     /// Image picker
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
@@ -43,6 +41,10 @@ struct AddEntryView: View {
 
     /// Score picker state
     @State private var showScoreSheet = false
+
+    /// Loading states
+    @State private var isLoading = false
+    @State private var isSaving = false
     
     var body: some View {
         NavigationStack {
@@ -114,11 +116,19 @@ struct AddEntryView: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(action: { saveEntry() }) {
-                        Image(systemName: "checkmark")
-                            .fontWeight(.semibold)
+                    Button(action: {
+                        Task {
+                            await saveEntry()
+                        }
+                    }) {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "checkmark")
+                                .fontWeight(.semibold)
+                        }
                     }
-                    .disabled(title.isEmpty)
+                    .disabled(title.isEmpty || isSaving)
                     .buttonStyle(.borderedProminent)
                 }
             }
@@ -127,12 +137,8 @@ struct AddEntryView: View {
                     await loadImages(from: newValue)
                 }
             }
-            .onAppear {
-                if let item = editingItem {
-                    loadItemData(item)
-                } else if selectedCollection == nil, let first = collections.first {
-                    selectedCollection = first
-                }
+            .task {
+                await loadData()
             }
             .sheet(isPresented: $showAISearchSheet) {
                 AISearchBottomSheet(
@@ -269,30 +275,48 @@ struct AddEntryView: View {
         }
     }
     
-    private func loadItemData(_ item: Item) {
-        selectedCollection = item.collection
-        title = item.title
-        score = item.score
-        date = item.date
-        selectedImages = item.images.compactMap { UIImage(data: $0) }
+    private func loadData() async {
+        isLoading = true
+        errorMessage = nil
 
-        // Migrate additionalFields to notes if needed
-        if !item.additionalFields.isEmpty && item.entryDescription.isEmpty {
-            let fieldsString = item.additionalFields
-                .sorted { $0.key < $1.key }
-                .map { "\($0.key): \($0.value)" }
-                .joined(separator: ", ")
-            entryDescription = fieldsString
-        } else if !item.additionalFields.isEmpty {
-            // If notes already exist, prepend fields
-            let fieldsString = item.additionalFields
-                .sorted { $0.key < $1.key }
-                .map { "\($0.key): \($0.value)" }
-                .joined(separator: ", ")
-            entryDescription = "\(fieldsString)\n\(item.entryDescription)"
-        } else {
-            entryDescription = item.entryDescription
+        do {
+            // Load collections
+            collections = try await CollectionService.shared.getCollections()
+
+            // If editing, load the entry
+            if let entryID = editingEntryID {
+                let entry = try await EntryService.shared.getEntry(id: entryID)
+                title = entry.title
+                entryDescription = entry.description
+                score = entry.score
+                date = entry.date
+
+                if let collectionID = entry.collectionID {
+                    selectedCollection = collections.first { $0.id == collectionID }
+                }
+
+                // Load images
+                let entryImages = try await EntryService.shared.getEntryImages(entryID: entryID)
+                let sortedImages = entryImages.sorted { $0.position < $1.position }
+                selectedImages = sortedImages.compactMap { imageModel in
+                    guard let data = Data(base64Encoded: imageModel.data),
+                          let uiImage = UIImage(data: data) else {
+                        return nil
+                    }
+                    return uiImage
+                }
+            } else {
+                // New entry: select first collection
+                if selectedCollection == nil {
+                    selectedCollection = collections.first
+                }
+            }
+        } catch {
+            errorMessage = "Failed to load data: \(error.localizedDescription)"
+            showError = true
         }
+
+        isLoading = false
     }
     
     private func loadImages(from items: [PhotosPickerItem]) async {
@@ -311,30 +335,44 @@ struct AddEntryView: View {
         }
     }
     
-    private func saveEntry() {
-        let imageData = selectedImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
+    private func saveEntry() async {
+        isSaving = true
+        errorMessage = nil
 
-        if let item = editingItem {
-            item.collection = selectedCollection
-            item.title = title
-            item.entryDescription = entryDescription
-            item.score = score
-            item.date = date
-            item.additionalFields = [:] // Clear old additionalFields
-            item.images = imageData
-        } else {
-            let newItem = Item(
-                collection: selectedCollection,
-                title: title,
-                entryDescription: entryDescription,
-                score: score,
-                date: date,
-                additionalFields: [:],
-                images: imageData
-            )
-            modelContext.insert(newItem)
+        do {
+            let imageData = selectedImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
+
+            if let entryID = editingEntryID {
+                // Update existing entry
+                _ = try await EntryService.shared.updateEntry(
+                    id: entryID,
+                    collectionID: selectedCollection?.id,
+                    title: title,
+                    description: entryDescription,
+                    score: score,
+                    date: date,
+                    additionalFields: [:],
+                    imageData: imageData.isEmpty ? nil : imageData
+                )
+            } else {
+                // Create new entry
+                _ = try await EntryService.shared.createEntry(
+                    collectionID: selectedCollection?.id,
+                    title: title,
+                    description: entryDescription,
+                    score: score,
+                    date: date,
+                    additionalFields: [:],
+                    imageData: imageData
+                )
+            }
+
+            dismiss()
+        } catch {
+            errorMessage = "Failed to save entry: \(error.localizedDescription)"
+            showError = true
+            isSaving = false
         }
-        dismiss()
     }
 }
 
@@ -378,10 +416,10 @@ struct ImageThumbnail: View {
 }
 
 struct CollectionButton: View {
-    let collection: Collection
+    let collection: CollectionModel
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
@@ -765,17 +803,5 @@ struct ScoreOptionButton: View {
 }
 
 #Preview {
-    // swiftlint:disable:next force_try
-    let container = try! ModelContainer(
-        for: Collection.self, Item.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-    )
-
-    // Add default collections
-    for (name, icon) in Collection.defaultCollections {
-        container.mainContext.insert(Collection(name: name, icon: icon))
-    }
-
-    return AddEntryView()
-        .modelContainer(container)
+    AddEntryView()
 }

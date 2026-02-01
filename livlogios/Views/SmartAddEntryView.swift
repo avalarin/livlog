@@ -5,24 +5,23 @@
 //  Created by avprokopev on 31.12.2025.
 //
 
-import SwiftData
 import SwiftUI
 
 struct SmartAddEntryView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Collection.createdAt) private var collections: [Collection]
-    
+
+    @State private var collections: [CollectionModel] = []
     @State private var searchQuery = ""
     @State private var isSearching = false
     @State private var isDownloadingImages = false
+    @State private var isSaving = false
     @State private var options: [OpenAIService.EntryOption] = []
     @State private var selectedOption: OpenAIService.EntryOption?
     @State private var errorMessage: String?
     @State private var showingManualEntry = false
-    
+
     // For selected option - editable fields
-    @State private var selectedCollection: Collection?
+    @State private var selectedCollection: CollectionModel?
     @State private var score: ScoreRating = .okay
     @State private var date: Date = Date()
     @State private var notes: String = ""
@@ -47,13 +46,24 @@ struct SmartAddEntryView: View {
                 
                 if selectedOption != nil {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
-                            saveEntry()
+                        Button {
+                            Task {
+                                await saveEntry()
+                            }
+                        } label: {
+                            if isSaving {
+                                ProgressView()
+                            } else {
+                                Text("Save")
+                            }
                         }
                         .fontWeight(.semibold)
-                        .disabled(isDownloadingImages)
+                        .disabled(isDownloadingImages || isSaving)
                     }
                 }
+            }
+            .task {
+                await loadCollections()
             }
             .sheet(isPresented: $showingManualEntry) {
                 AddEntryView()
@@ -516,21 +526,36 @@ struct SmartAddEntryView: View {
         }
     }
     
-    private func saveEntry() {
+    private func loadCollections() async {
+        do {
+            collections = try await CollectionService.shared.getCollections()
+        } catch {
+            errorMessage = "Failed to load collections: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveEntry() async {
         guard let option = selectedOption else { return }
-        
-        let newItem = Item(
-            collection: selectedCollection,
-            title: option.title,
-            entryDescription: notes.isEmpty ? option.description : notes,
-            score: score,
-            date: date,
-            additionalFields: option.additionalFields,
-            images: option.downloadedImages
-        )
-        
-        modelContext.insert(newItem)
-        dismiss()
+
+        isSaving = true
+        errorMessage = nil
+
+        do {
+            _ = try await EntryService.shared.createEntry(
+                collectionID: selectedCollection?.id,
+                title: option.title,
+                description: notes.isEmpty ? option.description : notes,
+                score: score,
+                date: date,
+                additionalFields: option.additionalFields,
+                imageData: option.downloadedImages
+            )
+
+            dismiss()
+        } catch {
+            errorMessage = "Failed to save entry: \(error.localizedDescription)"
+            isSaving = false
+        }
     }
 }
 
@@ -538,10 +563,10 @@ struct SmartAddEntryView: View {
 
 struct OptionCard: View {
     let option: OpenAIService.EntryOption
-    let collections: [Collection]
+    let collections: [CollectionModel]
     let onSelect: () -> Void
-    
-    private var suggestedCollection: Collection? {
+
+    private var suggestedCollection: CollectionModel? {
         let typeLower = option.entryType.lowercased()
         return collections.first { $0.name.lowercased().contains(typeLower) || typeLower.contains($0.name.lowercased()) }
     }
@@ -616,9 +641,4 @@ struct OptionCard: View {
         }
         .buttonStyle(.plain)
     }
-}
-
-#Preview {
-    SmartAddEntryView()
-        .modelContainer(for: [Collection.self, Item.self], inMemory: true)
 }

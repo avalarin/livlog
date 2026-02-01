@@ -12,7 +12,8 @@
       "Bash(go mod download:*)",
       "Bash(go get:*)",
       "Bash(grep:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(just:*)"
     ]
   }
 }

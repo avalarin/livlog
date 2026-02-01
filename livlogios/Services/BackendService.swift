@@ -72,7 +72,15 @@ actor BackendService {
         }
     }
 
-    // MARK: - Private Request Helper
+    // MARK: - Request Helpers
+
+    func makeAuthenticatedRequest(
+        path: String,
+        method: String,
+        body: Data? = nil
+    ) async throws -> (Data, HTTPURLResponse) {
+        return try await makeRequest(path: path, method: method, body: body, includeAuth: true)
+    }
 
     private func makeRequest(
         path: String,
