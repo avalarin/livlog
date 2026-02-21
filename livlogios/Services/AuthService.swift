@@ -6,8 +6,8 @@
 //
 
 import AuthenticationServices
-import Foundation
 import Combine
+import Foundation
 
 @MainActor
 class AuthService: ObservableObject {

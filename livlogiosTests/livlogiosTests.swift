@@ -54,6 +54,10 @@ struct livlogiosTests {
                 "Year": "1999",
                 "Genre": "Sci-Fi"
             },
+            "images": [
+                {"id": "img-id-1", "is_cover": true, "position": 0},
+                {"id": "img-id-2", "is_cover": false, "position": 1}
+            ],
             "created_at": "2024-02-01T10:30:45Z",
             "updated_at": "2024-02-01T10:30:45Z"
         }
@@ -74,6 +78,11 @@ struct livlogiosTests {
         #expect(entry.score == .great)
         #expect(entry.additionalFields["Year"] == "1999")
         #expect(entry.additionalFields["Genre"] == "Sci-Fi")
+        #expect(entry.images.count == 2)
+        #expect(entry.images[0].id == "img-id-1")
+        #expect(entry.images[0].isCover == true)
+        #expect(entry.images[1].id == "img-id-2")
+        #expect(entry.images[1].position == 1)
     }
 
     @Test func testEntryModelDecodingWithTimezone() async throws {
@@ -87,6 +96,7 @@ struct livlogiosTests {
             "score": 2,
             "date": "2024-02-01",
             "additional_fields": {},
+            "images": [],
             "created_at": "2024-02-01T10:30:45+00:00",
             "updated_at": "2024-02-01T10:30:45+00:00"
         }

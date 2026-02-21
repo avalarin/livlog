@@ -14,6 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type imageMetaResponse struct {
+	ID       string `json:"id"`
+	IsCover  bool   `json:"is_cover"`
+	Position int    `json:"position"`
+}
+
 type EntryHandler struct {
 	entryService *service.EntryService
 }
@@ -31,7 +37,7 @@ func (h *EntryHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/entries/{id}", h.GetEntry)
 	r.Put("/entries/{id}", h.UpdateEntry)
 	r.Delete("/entries/{id}", h.DeleteEntry)
-	r.Get("/entries/{id}/images", h.GetEntryImages)
+	r.Get("/images/{id}", h.GetImage)
 }
 
 type imageData struct {
@@ -58,16 +64,11 @@ type entryResponse struct {
 	Score            int               `json:"score"`
 	Date             string            `json:"date"`
 	AdditionalFields map[string]string `json:"additional_fields"`
+	Images           []imageMetaResponse `json:"images"`
 	CreatedAt        string            `json:"created_at"`
 	UpdatedAt        string            `json:"updated_at"`
 }
 
-type imageResponse struct {
-	ID       string `json:"id"`
-	Data     string `json:"data"` // base64 encoded
-	IsCover  bool   `json:"is_cover"`
-	Position int    `json:"position"`
-}
 
 func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
@@ -106,9 +107,20 @@ func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Batch fetch image metadata for all entries
+	entryIDs := make([]uuid.UUID, len(entries))
+	for i, e := range entries {
+		entryIDs[i] = e.ID
+	}
+	imageMetasMap, err := h.entryService.GetImageMetasByEntryIDs(r.Context(), entryIDs)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to get image metadata", err)
+		return
+	}
+
 	response := make([]entryResponse, len(entries))
 	for i, e := range entries {
-		response[i] = mapEntryToResponse(e)
+		response[i] = mapEntryToResponse(e, imageMetasMap[e.ID])
 	}
 
 	respondWithJSON(w, http.StatusOK, response)
@@ -188,7 +200,8 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, mapEntryToResponse(entry))
+	imageMetas, _ := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
+	respondWithJSON(w, http.StatusCreated, mapEntryToResponse(entry, imageMetas))
 }
 
 func (h *EntryHandler) GetEntry(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +234,8 @@ func (h *EntryHandler) GetEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, mapEntryToResponse(entry))
+	imageMetas, _ := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
+	respondWithJSON(w, http.StatusOK, mapEntryToResponse(entry, imageMetas))
 }
 
 func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
@@ -312,7 +326,8 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, mapEntryToResponse(entry))
+	imageMetas, _ := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
+	respondWithJSON(w, http.StatusOK, mapEntryToResponse(entry, imageMetas))
 }
 
 func (h *EntryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
@@ -348,7 +363,7 @@ func (h *EntryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Entry deleted successfully"})
 }
 
-func (h *EntryHandler) GetEntryImages(w http.ResponseWriter, r *http.Request) {
+func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
 		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
@@ -361,34 +376,26 @@ func (h *EntryHandler) GetEntryImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entryID := chi.URLParam(r, "id")
-	eid, err := uuid.Parse(entryID)
+	imageID := chi.URLParam(r, "id")
+	imgID, err := uuid.Parse(imageID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid entry ID", err)
+		respondWithError(w, http.StatusBadRequest, "Invalid image ID", err)
 		return
 	}
 
-	images, err := h.entryService.GetEntryImages(r.Context(), eid, uid)
+	img, err := h.entryService.GetImageByID(r.Context(), imgID, uid)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntryNotFound) {
-			respondWithError(w, http.StatusNotFound, "Entry not found", err)
+			respondWithError(w, http.StatusNotFound, "Image not found", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to get images", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to get image", err)
 		return
 	}
 
-	response := make([]imageResponse, len(images))
-	for i, img := range images {
-		response[i] = imageResponse{
-			ID:       img.ID.String(),
-			Data:     base64.StdEncoding.EncodeToString(img.ImageData),
-			IsCover:  img.IsCover,
-			Position: img.Position,
-		}
-	}
-
-	respondWithJSON(w, http.StatusOK, response)
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.WriteHeader(http.StatusOK)
+	w.Write(img.ImageData)
 }
 
 func (h *EntryHandler) SearchEntries(w http.ResponseWriter, r *http.Request) {
@@ -417,19 +424,39 @@ func (h *EntryHandler) SearchEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Batch fetch image metadata for all entries
+	entryIDs := make([]uuid.UUID, len(entries))
+	for i, e := range entries {
+		entryIDs[i] = e.ID
+	}
+	imageMetasMap, err := h.entryService.GetImageMetasByEntryIDs(r.Context(), entryIDs)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to get image metadata", err)
+		return
+	}
+
 	response := make([]entryResponse, len(entries))
 	for i, e := range entries {
-		response[i] = mapEntryToResponse(e)
+		response[i] = mapEntryToResponse(e, imageMetasMap[e.ID])
 	}
 
 	respondWithJSON(w, http.StatusOK, response)
 }
 
-func mapEntryToResponse(e *repository.Entry) entryResponse {
+func mapEntryToResponse(e *repository.Entry, imageMetas []repository.ImageMeta) entryResponse {
 	var collectionID *string
 	if e.CollectionID != nil {
 		cid := e.CollectionID.String()
 		collectionID = &cid
+	}
+
+	images := make([]imageMetaResponse, len(imageMetas))
+	for i, m := range imageMetas {
+		images[i] = imageMetaResponse{
+			ID:       m.ID.String(),
+			IsCover:  m.IsCover,
+			Position: m.Position,
+		}
 	}
 
 	return entryResponse{
@@ -440,6 +467,7 @@ func mapEntryToResponse(e *repository.Entry) entryResponse {
 		Score:            e.Score,
 		Date:             e.Date.Format("2006-01-02"),
 		AdditionalFields: e.AdditionalFields,
+		Images:           images,
 		CreatedAt:        e.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:        e.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}

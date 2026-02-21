@@ -227,19 +227,40 @@ func (s *EntryService) DeleteEntry(
 	return s.entryRepo.DeleteEntry(ctx, id)
 }
 
-// GetEntryImages retrieves images for an entry
-func (s *EntryService) GetEntryImages(
+// GetImageByID retrieves a single image by ID, validating user ownership
+func (s *EntryService) GetImageByID(
 	ctx context.Context,
-	entryID uuid.UUID,
+	imageID uuid.UUID,
 	userID uuid.UUID,
-) ([]repository.EntryImage, error) {
-	// Check ownership
-	_, err := s.GetEntryByID(ctx, entryID, userID)
+) (*repository.EntryImage, error) {
+	img, err := s.entryRepo.GetImageByID(ctx, imageID)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.entryRepo.GetEntryImages(ctx, entryID)
+	// Check ownership via parent entry
+	_, err = s.GetEntryByID(ctx, img.EntryID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return img, nil
+}
+
+// GetEntryImageMetas returns image metadata for a single entry
+func (s *EntryService) GetEntryImageMetas(
+	ctx context.Context,
+	entryID uuid.UUID,
+) ([]repository.ImageMeta, error) {
+	return s.entryRepo.GetEntryImageMetas(ctx, entryID)
+}
+
+// GetImageMetasByEntryIDs returns a map of entry ID -> image metadata for multiple entries
+func (s *EntryService) GetImageMetasByEntryIDs(
+	ctx context.Context,
+	entryIDs []uuid.UUID,
+) (map[uuid.UUID][]repository.ImageMeta, error) {
+	return s.entryRepo.GetImageMetasByEntryIDs(ctx, entryIDs)
 }
 
 // SearchEntries searches entries by query

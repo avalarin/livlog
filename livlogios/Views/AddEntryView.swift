@@ -295,16 +295,8 @@ struct AddEntryView: View {
                     selectedCollection = collections.first { $0.id == collectionID }
                 }
 
-                // Load images
-                let entryImages = try await EntryService.shared.getEntryImages(entryID: entryID)
-                let sortedImages = entryImages.sorted { $0.position < $1.position }
-                selectedImages = sortedImages.compactMap { imageModel in
-                    guard let data = Data(base64Encoded: imageModel.data),
-                          let uiImage = UIImage(data: data) else {
-                        return nil
-                    }
-                    return uiImage
-                }
+                // Load images using IDs from entry
+                selectedImages = await loadImages(imageIDs: entry.images)
             } else {
                 // New entry: select first collection
                 if selectedCollection == nil {
@@ -335,6 +327,25 @@ struct AddEntryView: View {
         }
     }
     
+    private func loadImages(imageIDs: [ImageMeta]) async -> [UIImage] {
+        await withTaskGroup(of: (Int, UIImage?).self) { group in
+            for (index, imageMeta) in imageIDs.enumerated() {
+                group.addTask {
+                    guard let data = try? await EntryService.shared.getImage(imageID: imageMeta.id),
+                          let uiImage = UIImage(data: data) else {
+                        return (index, nil)
+                    }
+                    return (index, uiImage)
+                }
+            }
+            var results: [(Int, UIImage?)] = []
+            for await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
+        }
+    }
+
     private func saveEntry() async {
         isSaving = true
         errorMessage = nil

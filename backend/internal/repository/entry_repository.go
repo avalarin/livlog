@@ -38,6 +38,12 @@ type EntryImage struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type ImageMeta struct {
+	ID       uuid.UUID `json:"id"`
+	IsCover  bool      `json:"is_cover"`
+	Position int       `json:"position"`
+}
+
 type EntryRepository struct {
 	db *pgxpool.Pool
 }
@@ -337,6 +343,99 @@ func (r *EntryRepository) GetEntryImages(
 	}
 
 	return images, nil
+}
+
+// GetEntryImageMetas returns image metadata for an entry, ordered by position
+func (r *EntryRepository) GetEntryImageMetas(
+	ctx context.Context,
+	entryID uuid.UUID,
+) ([]ImageMeta, error) {
+	query := `
+		SELECT id, is_cover, position FROM entry_images
+		WHERE entry_id = $1
+		ORDER BY position ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, entryID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query image metas: %w", err)
+	}
+	defer rows.Close()
+
+	var metas []ImageMeta
+	for rows.Next() {
+		var m ImageMeta
+		if err := rows.Scan(&m.ID, &m.IsCover, &m.Position); err != nil {
+			return nil, fmt.Errorf("failed to scan image meta: %w", err)
+		}
+		metas = append(metas, m)
+	}
+
+	return metas, rows.Err()
+}
+
+// GetImageByID retrieves a single image by its ID
+func (r *EntryRepository) GetImageByID(
+	ctx context.Context,
+	imageID uuid.UUID,
+) (*EntryImage, error) {
+	query := `
+		SELECT id, entry_id, image_data, is_cover, position, created_at
+		FROM entry_images
+		WHERE id = $1
+	`
+
+	var img EntryImage
+	err := r.db.QueryRow(ctx, query, imageID).Scan(
+		&img.ID,
+		&img.EntryID,
+		&img.ImageData,
+		&img.IsCover,
+		&img.Position,
+		&img.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("image not found")
+		}
+		return nil, fmt.Errorf("failed to get image: %w", err)
+	}
+
+	return &img, nil
+}
+
+// GetImageMetasByEntryIDs returns a map of entry ID -> image metadata for multiple entries
+func (r *EntryRepository) GetImageMetasByEntryIDs(
+	ctx context.Context,
+	entryIDs []uuid.UUID,
+) (map[uuid.UUID][]ImageMeta, error) {
+	if len(entryIDs) == 0 {
+		return make(map[uuid.UUID][]ImageMeta), nil
+	}
+
+	query := `
+		SELECT entry_id, id, is_cover, position FROM entry_images
+		WHERE entry_id = ANY($1)
+		ORDER BY entry_id, position ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, entryIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query image metas: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[uuid.UUID][]ImageMeta)
+	for rows.Next() {
+		var entryID uuid.UUID
+		var m ImageMeta
+		if err := rows.Scan(&entryID, &m.ID, &m.IsCover, &m.Position); err != nil {
+			return nil, fmt.Errorf("failed to scan: %w", err)
+		}
+		result[entryID] = append(result[entryID], m)
+	}
+
+	return result, rows.Err()
 }
 
 // SearchEntries searches entries by title or description

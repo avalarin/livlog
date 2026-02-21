@@ -240,15 +240,9 @@ struct EntryDetailView: View {
                 collection = collections.first { $0.id == collectionID }
             }
 
-            // Load images
-            let entryImages = try await EntryService.shared.getEntryImages(entryID: entryID)
-            let sortedImages = entryImages.sorted { $0.position < $1.position }
-            images = sortedImages.compactMap { imageModel in
-                guard let data = Data(base64Encoded: imageModel.data),
-                      let uiImage = UIImage(data: data) else {
-                    return nil
-                }
-                return uiImage
+            // Load images using IDs from entry
+            if let entry = entry {
+                images = await loadImages(imageIDs: entry.images)
             }
         } catch {
             errorMessage = "Failed to load entry: \(error.localizedDescription)"
@@ -256,6 +250,25 @@ struct EntryDetailView: View {
         }
 
         isLoading = false
+    }
+
+    private func loadImages(imageIDs: [ImageMeta]) async -> [UIImage] {
+        await withTaskGroup(of: (Int, UIImage?).self) { group in
+            for (index, imageMeta) in imageIDs.enumerated() {
+                group.addTask {
+                    guard let data = try? await EntryService.shared.getImage(imageID: imageMeta.id),
+                          let uiImage = UIImage(data: data) else {
+                        return (index, nil)
+                    }
+                    return (index, uiImage)
+                }
+            }
+            var results: [(Int, UIImage?)] = []
+            for await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
+        }
     }
 
     private func deleteEntry() async {

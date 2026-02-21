@@ -128,6 +128,7 @@ struct EntryModel: Codable, Identifiable {
     let score: ScoreRating
     let date: Date
     let additionalFields: [String: String]
+    let images: [ImageMeta]
     let createdAt: Date
     let updatedAt: Date
 
@@ -139,6 +140,7 @@ struct EntryModel: Codable, Identifiable {
         case score
         case date
         case additionalFields = "additional_fields"
+        case images
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -152,6 +154,7 @@ struct EntryModel: Codable, Identifiable {
         description = try container.decode(String.self, forKey: .description)
         score = try container.decode(ScoreRating.self, forKey: .score)
         additionalFields = try container.decode([String: String].self, forKey: .additionalFields)
+        images = try container.decode([ImageMeta].self, forKey: .images)
 
         // Decode date field (YYYY-MM-DD format)
         let dateString = try container.decode(String.self, forKey: .date)
@@ -211,6 +214,7 @@ struct EntryModel: Codable, Identifiable {
         try container.encode(description, forKey: .description)
         try container.encode(score, forKey: .score)
         try container.encode(additionalFields, forKey: .additionalFields)
+        try container.encode(images, forKey: .images)
 
         // Encode date as YYYY-MM-DD
         let dateFormatter = DateFormatter()
@@ -226,17 +230,15 @@ struct EntryModel: Codable, Identifiable {
     }
 }
 
-// MARK: - Entry Image Model
+// MARK: - Image Metadata Model
 
-struct EntryImage: Codable, Identifiable {
+struct ImageMeta: Codable, Identifiable {
     let id: String
-    let data: String // base64 encoded
     let isCover: Bool
     let position: Int
 
     enum CodingKeys: String, CodingKey {
         case id
-        case data
         case isCover = "is_cover"
         case position
     }

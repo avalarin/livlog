@@ -405,6 +405,7 @@ struct EntryCard: View {
 
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
+    @State private var coverImage: UIImage?
 
     private var metadataLine: String {
         // Show first line of notes
@@ -414,25 +415,34 @@ struct EntryCard: View {
         let firstLine = item.description.components(separatedBy: .newlines).first ?? ""
         return firstLine.isEmpty ? "(no notes)" : firstLine
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
-                LinearGradient(
-                    colors: [
-                        Color.accentColor.opacity(0.3),
-                        Color.accentColor.opacity(0.1)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 140)
-                .overlay(
-                    Text(collection?.icon ?? "📝")
-                        .font(.system(size: 48))
-                        .opacity(0.5)
-                )
+                if let coverImage {
+                    Image(uiImage: coverImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 140)
+                        .clipped()
+                } else {
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor.opacity(0.3),
+                            Color.accentColor.opacity(0.1)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 140)
+                    .overlay(
+                        Text(collection?.icon ?? "📝")
+                            .font(.system(size: 48))
+                            .opacity(0.5)
+                    )
+                }
 
                 Text(item.score.emoji)
                     .font(.title3)
@@ -496,6 +506,19 @@ struct EntryCard: View {
         } message: {
             Text("Are you sure you want to delete \"\(item.title)\"?")
         }
+        .task {
+            await loadCoverImage()
+        }
+    }
+
+    private func loadCoverImage() async {
+        let cover = item.images.first { $0.isCover }
+            ?? item.images.first
+        guard let cover else { return }
+        guard let data = try? await EntryService.shared.getImage(
+            imageID: cover.id
+        ) else { return }
+        coverImage = UIImage(data: data)
     }
 }
 
@@ -506,6 +529,7 @@ struct EntryListRow: View {
 
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
+    @State private var coverImage: UIImage?
 
     private var metadataLine: String {
         // Show first line of notes
@@ -518,13 +542,21 @@ struct EntryListRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(collection?.icon ?? "📝")
-                .font(.system(size: 40))
-                .frame(width: 60, height: 60)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.accentColor.opacity(0.1))
-                )
+            if let coverImage {
+                Image(uiImage: coverImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                Text(collection?.icon ?? "📝")
+                    .font(.system(size: 40))
+                    .frame(width: 60, height: 60)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.accentColor.opacity(0.1))
+                    )
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
@@ -576,6 +608,19 @@ struct EntryListRow: View {
         } message: {
             Text("Are you sure you want to delete \"\(item.title)\"?")
         }
+        .task {
+            await loadCoverImage()
+        }
+    }
+
+    private func loadCoverImage() async {
+        let cover = item.images.first { $0.isCover }
+            ?? item.images.first
+        guard let cover else { return }
+        guard let data = try? await EntryService.shared.getImage(
+            imageID: cover.id
+        ) else { return }
+        coverImage = UIImage(data: data)
     }
 }
 

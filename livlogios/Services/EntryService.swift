@@ -234,14 +234,14 @@ actor EntryService {
         )
     }
 
-    // MARK: - Get Entry Images
+    // MARK: - Get Image
 
-    func getEntryImages(entryID: String) async throws -> [EntryImage] {
+    func getImage(imageID: String) async throws -> Data {
         let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
-            path: "/entries/\(entryID)/images",
+            path: "/images/\(imageID)",
             method: "GET"
         )
 
-        return try decoder.decode([EntryImage].self, from: data)
+        return data
     }
 }
