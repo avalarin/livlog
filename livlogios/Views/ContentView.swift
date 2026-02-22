@@ -14,6 +14,8 @@ enum ViewMode: String {
 
 struct ContentView: View {
     @AppStorage("viewMode") private var viewMode: ViewMode = .grid
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private let isPreview: Bool
 
@@ -34,11 +36,18 @@ struct ContentView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingError = false
+    @State private var containerWidth: CGFloat = 0
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
-    ]
+    private func columnCount() -> Int {
+        if horizontalSizeClass == .compact {
+            return verticalSizeClass == .compact ? 3 : 2
+        }
+        return containerWidth > 1050 ? 4 : 3
+    }
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: columnCount())
+    }
 
     var filteredItems: [EntryModel] {
         var result = items
@@ -123,7 +132,7 @@ struct ContentView: View {
                                 .padding(.top, 60)
                             } else {
                                 if viewMode == .grid {
-                                    LazyVGrid(columns: columns, spacing: 12) {
+                                    LazyVGrid(columns: gridColumns, spacing: 12) {
                                         ForEach(filteredItems) { item in
                                             let collection = collections.first { $0.id == item.collectionID }
                                             NavigationLink(destination: EntryDetailView(entryID: item.id)) {
@@ -159,7 +168,11 @@ struct ContentView: View {
                                 }
                             }
                         }
-                        .padding(.bottom, 20)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.width
+                        } action: { width in
+                            containerWidth = width
+                        }
                     }
                     .safeAreaInset(edge: .bottom) {
                         HStack(spacing: 12) {
@@ -293,15 +306,12 @@ struct ContentView: View {
         }
 
         let testData: [(String?, String, String, ScoreRating, TimeInterval, [String: String], [String])] = [
-            (moviesCollection.id, "Inception", "A mind-bending masterpiece by Christopher Nolan about dream invasion.",
+            (moviesCollection.id, "Inception", "Inception (2010) is a sci‑fi heist thriller in which Dom Cobb, a skilled thief who steals secrets from inside people’s dreams, is offered a chance to clear his criminal record. His team must attempt the harder task of “inception”—planting an idea in a target’s mind—by entering layered dream worlds with shifting rules and unstable physics. As the dreams deepen, time stretches and reality becomes harder to distinguish from illusion. The film explores memory, guilt, and perception, building to an ambiguous ending.",
              .great, 0, ["Year": "2010", "Genre": "Sci-Fi, Thriller"],
              ["00000000-0000-0000-0001-000000000001"]),
             (moviesCollection.id, "The Dark Knight", "Heath Ledger's iconic Joker performance.",
              .great, -86400 * 2, ["Year": "2008", "Genre": "Action, Drama"],
              ["00000000-0000-0000-0001-000000000004"]),
-            (booksCollection.id, "XXX", "Orwell's dystopian vision of totalitarian future.",
-             .great, -86400 * 5, ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"],
-             []),
             (booksCollection.id, "1984", "Orwell's dystopian vision of totalitarian future.",
              .great, -86400 * 5, ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"],
              ["00000000-0000-0000-0001-000000000002"]),
@@ -454,42 +464,38 @@ struct EntryCard: View {
     @State private var coverImage: UIImage?
 
     private var metadataLine: String {
-        // Show first line of notes
-        if item.description.isEmpty {
-            return "(no notes)"
-        }
-        let firstLine = item.description.components(separatedBy: .newlines).first ?? ""
-        return firstLine.isEmpty ? "(no notes)" : firstLine
+        let line = item.additionalFields.values.joined(separator: "・")
+        return line.isEmpty ? "-" : line
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color.accentColor.opacity(0.3),
+                        Color.accentColor.opacity(0.1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: 140)
+                .overlay(
+                    Text(collection?.icon ?? "📝")
+                        .font(.system(size: 48))
+                        .opacity(0.5)
+                )
+                
                 if let coverImage {
                     Image(uiImage: coverImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 140)
-                        .clipped()
-                } else {
-                    LinearGradient(
-                        colors: [
-                            Color.accentColor.opacity(0.3),
-                            Color.accentColor.opacity(0.1)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 140)
-                    .overlay(
-                        Text(collection?.icon ?? "📝")
-                            .font(.system(size: 48))
-                            .opacity(0.5)
-                    )
+                        .layoutPriority(-1)
                 }
-
+            }
+            .clipped()
+            .overlay(alignment: .topLeading) {
                 Text(item.score.emoji)
                     .font(.title3)
                     .padding(6)
@@ -497,9 +503,9 @@ struct EntryCard: View {
                     .clipShape(Circle())
                     .padding(8)
             }
-
+            
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 4) {
+                HStack(alignment: .top, spacing: 4) {
                     Text(collection?.icon ?? "📝")
                         .font(.caption)
                     Text(item.date, format: .dateTime.month(.abbreviated).day())
@@ -510,7 +516,7 @@ struct EntryCard: View {
                 Text(item.title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .lineLimit(2)
+                    .lineLimit(1)
 
                 if !metadataLine.isEmpty {
                     Text(metadataLine)
@@ -520,14 +526,15 @@ struct EntryCard: View {
                 }
 
                 if !item.description.isEmpty {
-                    Text(item.description)
+                    Text(item.description + "\n")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .lineLimit(2)
                 }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 12)
         }
         .frame(maxWidth: .infinity)
         .background(Color(.systemBackground))

@@ -297,33 +297,40 @@ extension EntryModel {
     static let previewItems: [EntryModel] = [
         EntryModel(
             id: "1", collectionID: "movies", title: "Inception",
-            description: "A mind-bending masterpiece by Christopher Nolan.",
+            description: "Inception (2010) is a sci‑fi heist thriller in which Dom Cobb, a skilled thief who steals secrets from inside people’s dreams, is offered a chance to clear his criminal record. His team must attempt the harder task of “inception”—planting an idea in a target’s mind—by entering layered dream worlds with shifting rules and unstable physics. As the dreams deepen, time stretches and reality becomes harder to distinguish from illusion. The film explores memory, guilt, and perception, building to an ambiguous ending.",
             score: .great, date: .now, additionalFields: ["Year": "2010", "Genre": "Sci-Fi"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000001", isCover: true, position: 0)]
         ),
         EntryModel(
-            id: "2", collectionID: "books", title: "1984",
-            description: "Orwell's dystopian vision of a totalitarian future.",
+            id: "2", collectionID: "books", title: "One Thousand Eight Hundred Eighty-Four",
+            description: "Orwell presents a bleak dystopian vision of a future shaped by an all-powerful totalitarian state—one that maintains control through constant surveillance, relentless propaganda, and the steady erosion of individual freedom, privacy, and independent thought.",
             score: .great, date: .now.addingTimeInterval(-86400 * 5),
             additionalFields: ["Year": "1949", "Author": "George Orwell"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000002", isCover: true, position: 0)]
         ),
         EntryModel(
             id: "3", collectionID: "games", title: "Elden Ring",
-            description: "Challenging but incredibly rewarding open-world adventure.",
+            description: "A demanding open-world adventure that doesn’t shy away from testing your patience and skill, but pays you back in a big way with a strong sense of progress, memorable discoveries, and the satisfaction of overcoming obstacles through persistence and smart choices.",
             score: .great, date: .now.addingTimeInterval(-86400 * 14),
             additionalFields: ["Year": "2022", "Platform": "PC"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000003", isCover: true, position: 0)]
         ),
         EntryModel(
-            id: "4", collectionID: "movies", title: "The Dark Knight",
-            description: "Heath Ledger's iconic Joker performance.",
+            id: "4", collectionID: "movies", title: "Dune",
+            description: "Dune",
+            score: .great, date: .now.addingTimeInterval(-86400 * 2),
+            additionalFields: ["Year": "1965", "Genre": "Sci-Fi", "Author": "Frank Herbert"],
+            images: []
+        ),
+        EntryModel(
+            id: "5", collectionID: "movies", title: "The Dark Knight",
+            description: "Heath Ledger’s Joker is widely regarded as an iconic performance, bringing a chilling mix of unpredictability, dark humor, and menace to the character while giving him a strangely compelling presence that lingers long after the film ends.",
             score: .great, date: .now.addingTimeInterval(-86400 * 2),
             additionalFields: ["Year": "2008", "Genre": "Action"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000004", isCover: true, position: 0)]
         ),
         EntryModel(
-            id: "5", collectionID: nil, title: "Concert: Radiohead",
+            id: "6", collectionID: nil, title: "Concert: Radiohead",
             description: "Amazing live performance, goosebumps throughout.",
             score: .great, date: .now.addingTimeInterval(-86400 * 30),
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000005", isCover: true, position: 0)]
