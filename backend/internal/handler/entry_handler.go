@@ -388,7 +388,7 @@ func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try seed images first — no ownership check needed.
+	// Try seed images first.
 	if seedImg, err := h.entryService.GetSeedImageByID(r.Context(), imgID); err == nil {
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.WriteHeader(http.StatusOK)
@@ -396,20 +396,8 @@ func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fall back to user-owned images.
-	userID := getUserIDFromContext(r.Context())
-	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
-		return
-	}
-
-	uid, err := uuid.Parse(userID)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
-		return
-	}
-
-	img, err := h.entryService.GetImageByID(r.Context(), imgID, uid)
+	// Fall back to user-uploaded images — no auth required, access by UUID.
+	img, err := h.entryService.GetImageByID(r.Context(), imgID)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntryNotFound) {
 			respondWithError(w, http.StatusNotFound, "Image not found", err)

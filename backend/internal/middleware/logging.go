@@ -11,6 +11,11 @@ import (
 func Logging(logger *zap.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/v1/health" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			start := time.Now()
 
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)

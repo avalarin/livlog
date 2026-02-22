@@ -237,24 +237,13 @@ func (s *EntryService) DeleteEntry(
 	return s.entryRepo.DeleteEntry(ctx, id)
 }
 
-// GetImageByID retrieves a single image by ID, validating user ownership
+// GetImageByID retrieves a single image by ID without ownership check.
+// Images are served on a public endpoint — access control is by UUID obscurity.
 func (s *EntryService) GetImageByID(
 	ctx context.Context,
 	imageID uuid.UUID,
-	userID uuid.UUID,
 ) (*repository.EntryImage, error) {
-	img, err := s.entryRepo.GetImageByID(ctx, imageID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check ownership via parent entry
-	_, err = s.GetEntryByID(ctx, img.EntryID, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	return img, nil
+	return s.entryRepo.GetImageByID(ctx, imageID)
 }
 
 // GetEntryImageMetas returns image metadata for a single entry
