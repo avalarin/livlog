@@ -1,0 +1,5 @@
+CREATE TABLE seed_images (
+    id UUID PRIMARY KEY,
+    image_data BYTEA NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);

@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	ErrEntryNotFound = errors.New("entry not found")
+	ErrEntryNotFound      = errors.New("entry not found")
+	ErrSeedImageNotFound  = errors.New("seed image not found")
 )
 
 type Entry struct {
@@ -493,4 +494,64 @@ func (r *EntryRepository) SearchEntries(
 	}
 
 	return entries, nil
+}
+
+// GetSeedImageByID retrieves a seed image by its fixed UUID (no user ownership check).
+func (r *EntryRepository) GetSeedImageByID(ctx context.Context, imageID uuid.UUID) (*EntryImage, error) {
+	var img EntryImage
+	err := r.db.QueryRow(ctx,
+		`SELECT id, image_data FROM seed_images WHERE id = $1`,
+		imageID,
+	).Scan(&img.ID, &img.ImageData)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSeedImageNotFound
+		}
+		return nil, fmt.Errorf("failed to get seed image: %w", err)
+	}
+	img.IsCover = true
+	img.Position = 0
+	return &img, nil
+}
+
+// UpsertSeedImages inserts seed images with fixed UUIDs, ignoring conflicts.
+func (r *EntryRepository) UpsertSeedImages(ctx context.Context, images map[uuid.UUID][]byte) error {
+	for id, data := range images {
+		_, err := r.db.Exec(ctx,
+			`INSERT INTO seed_images (id, image_data) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
+			id, data,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to upsert seed image %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// CopySeedImagesToEntry copies seed images into entry_images for a specific entry.
+func (r *EntryRepository) CopySeedImagesToEntry(ctx context.Context, entryID uuid.UUID, seedImageIDs []uuid.UUID) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for i, seedID := range seedImageIDs {
+		var data []byte
+		err := tx.QueryRow(ctx, `SELECT image_data FROM seed_images WHERE id = $1`, seedID).Scan(&data)
+		if err != nil {
+			return fmt.Errorf("seed image %s not found: %w", seedID, err)
+		}
+
+		isCover := i == 0
+		_, err = tx.Exec(ctx,
+			`INSERT INTO entry_images (entry_id, image_data, is_cover, position) VALUES ($1, $2, $3, $4)`,
+			entryID, data, isCover, i,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert entry image: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }

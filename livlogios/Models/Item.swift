@@ -24,6 +24,14 @@ struct CollectionModel: Codable, Identifiable {
         case updatedAt = "updated_at"
     }
 
+    init(id: String, name: String, icon: String, createdAt: Date = .now, updatedAt: Date = .now) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
@@ -145,6 +153,30 @@ struct EntryModel: Codable, Identifiable {
         case updatedAt = "updated_at"
     }
 
+    init(
+        id: String,
+        collectionID: String?,
+        title: String,
+        description: String,
+        score: ScoreRating,
+        date: Date,
+        additionalFields: [String: String] = [:],
+        images: [ImageMeta] = [],
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.id = id
+        self.collectionID = collectionID
+        self.title = title
+        self.description = description
+        self.score = score
+        self.date = date
+        self.additionalFields = additionalFields
+        self.images = images
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
@@ -237,9 +269,65 @@ struct ImageMeta: Codable, Identifiable {
     let isCover: Bool
     let position: Int
 
+    init(id: String, isCover: Bool, position: Int) {
+        self.id = id
+        self.isCover = isCover
+        self.position = position
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case isCover = "is_cover"
         case position
     }
 }
+
+// MARK: - Preview Data
+
+#if DEBUG
+extension CollectionModel {
+    static let previewMovies = CollectionModel(id: "movies", name: "Movies", icon: "🎬")
+    static let previewBooks = CollectionModel(id: "books", name: "Books", icon: "📚")
+    static let previewGames = CollectionModel(id: "games", name: "Games", icon: "🎮")
+
+    static let previewCollections: [CollectionModel] = [previewMovies, previewBooks, previewGames]
+}
+
+extension EntryModel {
+    static let previewItems: [EntryModel] = [
+        EntryModel(
+            id: "1", collectionID: "movies", title: "Inception",
+            description: "A mind-bending masterpiece by Christopher Nolan.",
+            score: .great, date: .now, additionalFields: ["Year": "2010", "Genre": "Sci-Fi"],
+            images: [ImageMeta(id: "00000000-0000-0000-0001-000000000001", isCover: true, position: 0)]
+        ),
+        EntryModel(
+            id: "2", collectionID: "books", title: "1984",
+            description: "Orwell's dystopian vision of a totalitarian future.",
+            score: .great, date: .now.addingTimeInterval(-86400 * 5),
+            additionalFields: ["Year": "1949", "Author": "George Orwell"],
+            images: [ImageMeta(id: "00000000-0000-0000-0001-000000000002", isCover: true, position: 0)]
+        ),
+        EntryModel(
+            id: "3", collectionID: "games", title: "Elden Ring",
+            description: "Challenging but incredibly rewarding open-world adventure.",
+            score: .great, date: .now.addingTimeInterval(-86400 * 14),
+            additionalFields: ["Year": "2022", "Platform": "PC"],
+            images: [ImageMeta(id: "00000000-0000-0000-0001-000000000003", isCover: true, position: 0)]
+        ),
+        EntryModel(
+            id: "4", collectionID: "movies", title: "The Dark Knight",
+            description: "Heath Ledger's iconic Joker performance.",
+            score: .great, date: .now.addingTimeInterval(-86400 * 2),
+            additionalFields: ["Year": "2008", "Genre": "Action"],
+            images: [ImageMeta(id: "00000000-0000-0000-0001-000000000004", isCover: true, position: 0)]
+        ),
+        EntryModel(
+            id: "5", collectionID: nil, title: "Concert: Radiohead",
+            description: "Amazing live performance, goosebumps throughout.",
+            score: .great, date: .now.addingTimeInterval(-86400 * 30),
+            images: [ImageMeta(id: "00000000-0000-0000-0001-000000000005", isCover: true, position: 0)]
+        )
+    ]
+}
+#endif

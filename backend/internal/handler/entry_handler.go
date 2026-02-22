@@ -37,6 +37,10 @@ func (h *EntryHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/entries/{id}", h.GetEntry)
 	r.Put("/entries/{id}", h.UpdateEntry)
 	r.Delete("/entries/{id}", h.DeleteEntry)
+}
+
+// RegisterPublicRoutes registers routes that do not require authentication.
+func (h *EntryHandler) RegisterPublicRoutes(r chi.Router) {
 	r.Get("/images/{id}", h.GetImage)
 }
 
@@ -54,6 +58,7 @@ type createEntryRequest struct {
 	Date             string             `json:"date"` // YYYY-MM-DD
 	AdditionalFields map[string]string  `json:"additional_fields,omitempty"`
 	Images           []imageData        `json:"images,omitempty"`
+	SeedImageIDs     []string           `json:"seed_image_ids,omitempty"`
 }
 
 type entryResponse struct {
@@ -178,6 +183,17 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Parse seed image IDs
+	var seedImageIDs []uuid.UUID
+	for _, idStr := range req.SeedImageIDs {
+		sid, err := uuid.Parse(idStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid seed image ID", err)
+			return
+		}
+		seedImageIDs = append(seedImageIDs, sid)
+	}
+
 	entry, err := h.entryService.CreateEntry(
 		r.Context(),
 		uid,
@@ -188,6 +204,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 		date,
 		req.AdditionalFields,
 		images,
+		seedImageIDs,
 	)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidTitle) ||
@@ -364,6 +381,22 @@ func (h *EntryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
+	imageID := chi.URLParam(r, "id")
+	imgID, err := uuid.Parse(imageID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid image ID", err)
+		return
+	}
+
+	// Try seed images first — no ownership check needed.
+	if seedImg, err := h.entryService.GetSeedImageByID(r.Context(), imgID); err == nil {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
+		w.Write(seedImg.ImageData)
+		return
+	}
+
+	// Fall back to user-owned images.
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
 		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
@@ -373,13 +406,6 @@ func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 	uid, err := uuid.Parse(userID)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
-		return
-	}
-
-	imageID := chi.URLParam(r, "id")
-	imgID, err := uuid.Parse(imageID)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid image ID", err)
 		return
 	}
 

@@ -42,6 +42,7 @@ func (s *EntryService) CreateEntry(
 	date time.Time,
 	additionalFields map[string]string,
 	images []repository.EntryImage,
+	seedImageIDs []uuid.UUID,
 ) (*repository.Entry, error) {
 	// Validate title
 	title = strings.TrimSpace(title)
@@ -95,9 +96,18 @@ func (s *EntryService) CreateEntry(
 		if err := s.entryRepo.SaveEntryImages(ctx, entry.ID, images); err != nil {
 			return nil, fmt.Errorf("failed to save images: %w", err)
 		}
+	} else if len(seedImageIDs) > 0 {
+		if err := s.entryRepo.CopySeedImagesToEntry(ctx, entry.ID, seedImageIDs); err != nil {
+			return nil, fmt.Errorf("failed to copy seed images: %w", err)
+		}
 	}
 
 	return entry, nil
+}
+
+// GetSeedImageByID returns a seed image by its fixed UUID without user ownership check.
+func (s *EntryService) GetSeedImageByID(ctx context.Context, imageID uuid.UUID) (*repository.EntryImage, error) {
+	return s.entryRepo.GetSeedImageByID(ctx, imageID)
 }
 
 // GetEntriesByUserID retrieves entries with pagination

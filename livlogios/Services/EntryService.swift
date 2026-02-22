@@ -81,7 +81,8 @@ actor EntryService {
         score: ScoreRating,
         date: Date,
         additionalFields: [String: String],
-        imageData: [Data]
+        imageData: [Data],
+        seedImageIDs: [String] = []
     ) async throws -> EntryModel {
         struct ImageData: Codable {
             let data: String
@@ -103,6 +104,7 @@ actor EntryService {
             let date: String
             let additionalFields: [String: String]
             let images: [ImageData]
+            let seedImageIDs: [String]
 
             enum CodingKeys: String, CodingKey {
                 case collectionID = "collection_id"
@@ -112,6 +114,7 @@ actor EntryService {
                 case date
                 case additionalFields = "additional_fields"
                 case images
+                case seedImageIDs = "seed_image_ids"
             }
         }
 
@@ -134,7 +137,8 @@ actor EntryService {
             score: score.rawValue,
             date: dateFormatter.string(from: date),
             additionalFields: additionalFields,
-            images: images
+            images: images,
+            seedImageIDs: seedImageIDs
         )
 
         let bodyData = try encoder.encode(request)

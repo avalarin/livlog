@@ -19,6 +19,7 @@ import (
 	"github.com/avalarin/livlog/backend/internal/logger"
 	"github.com/avalarin/livlog/backend/internal/middleware"
 	"github.com/avalarin/livlog/backend/internal/repository"
+	"github.com/avalarin/livlog/backend/internal/seed"
 	"github.com/avalarin/livlog/backend/internal/service"
 )
 
@@ -67,6 +68,12 @@ func main() {
 	collectionRepo := repository.NewCollectionRepository(db.Pool)
 	entryRepo := repository.NewEntryRepository(db.Pool)
 	aiSearchUsageRepo := repository.NewAISearchUsageRepository(db.Pool)
+
+	// Seed cover images with fixed UUIDs
+	log.Info("seeding cover images")
+	if err := entryRepo.UpsertSeedImages(ctx, seed.Images); err != nil {
+		log.Fatal("failed to seed images", zap.Error(err))
+	}
 
 	// Initialize services
 	appleVerifier := service.NewAppleVerifier(cfg.Apple.BundleID)
@@ -129,6 +136,7 @@ func main() {
 		r.Post("/auth/email/resend-code", authHandler.ResendVerificationCode)
 		r.Post("/auth/email/verify", authHandler.VerifyEmailCode)
 		r.Post("/auth/refresh", authHandler.RefreshToken)
+		entryHandler.RegisterPublicRoutes(r)
 
 		// Protected routes
 		r.Group(func(r chi.Router) {

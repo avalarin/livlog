@@ -15,15 +15,22 @@ enum ViewMode: String {
 struct ContentView: View {
     @AppStorage("viewMode") private var viewMode: ViewMode = .grid
 
+    private let isPreview: Bool
+
+    init(previewItems: [EntryModel] = [], previewCollections: [CollectionModel] = []) {
+        self.isPreview = !previewItems.isEmpty
+        _items = State(initialValue: previewItems)
+        _collections = State(initialValue: previewCollections)
+    }
+
     @State private var showingAddEntry = false
-    @State private var showingSmartAdd = false
     @State private var showingCollections = false
     @State private var selectedCollection: CollectionModel?
     @State private var searchText = ""
     @State private var showingDebugMenu = false
 
-    @State private var items: [EntryModel] = []
-    @State private var collections: [CollectionModel] = []
+    @State private var items: [EntryModel]
+    @State private var collections: [CollectionModel]
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingError = false
@@ -102,7 +109,7 @@ struct ContentView: View {
                                 items: items
                             )
                             .padding(.bottom, 16)
-                            
+
                             if filteredItems.isEmpty {
                                 VStack(spacing: 12) {
                                     Text("No matches")
@@ -152,68 +159,86 @@ struct ContentView: View {
                                 }
                             }
                         }
-                        .padding(.bottom, 100)
+                        .padding(.bottom, 20)
                     }
-                    .searchable(text: $searchText, prompt: "Search entries...")
+                    .safeAreaInset(edge: .bottom) {
+                        HStack(spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                    .font(.subheadline)
+                                TextField("Search entries...", text: $searchText)
+                                    .textFieldStyle(.automatic)
+                                if !searchText.isEmpty {
+                                    Button {
+                                        searchText = ""
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+
+                            Button {
+                                showingAddEntry = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 48, height: 48)
+                                    .background(Color.accentColor)
+                                    .clipShape(Circle())
+                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 16) {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
                         Button {
                             withAnimation(.spring(response: 0.3)) {
                                 viewMode = viewMode == .grid ? .list : .grid
                             }
                         } label: {
-                            Image(systemName: viewMode == .grid ? "square.grid.2x2" : "list.bullet")
-                                .symbolRenderingMode(.hierarchical)
+                            Label(
+                                viewMode == .grid ? "Switch to List" : "Switch to Grid",
+                                systemImage: viewMode == .grid ? "list.bullet" : "square.grid.2x2"
+                            )
                         }
 
-                        Menu {
-                            Button {
-                                showingCollections = true
-                            } label: {
-                                Label("Manage Collections", systemImage: "folder")
-                            }
+                        Divider()
 
-                            Divider()
-
-                            Button {
-                                Task {
-                                    await fillWithTestData()
-                                }
-                            } label: {
-                                Label("Fill with Test Data", systemImage: "doc.badge.plus")
-                            }
-
-                            Button(role: .destructive) {
-                                showingDebugMenu = true
-                            } label: {
-                                Label("Clear All Data", systemImage: "trash")
-                            }
-                        } label: {
-                            Image(systemName: "gear")
-                                .symbolRenderingMode(.hierarchical)
-                        }
-                    }
-                }
-                
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
                         Button {
-                            showingSmartAdd = true
+                            showingCollections = true
                         } label: {
-                            Label("Quick Add (AI)", systemImage: "sparkles")
+                            Label("Manage Collections", systemImage: "folder")
                         }
-                        
+
+                        Divider()
+
                         Button {
-                            showingAddEntry = true
+                            Task {
+                                await fillWithTestData()
+                            }
                         } label: {
-                            Label("Manual Add", systemImage: "pencil")
+                            Label("Fill with Test Data", systemImage: "doc.badge.plus")
+                        }
+
+                        Button(role: .destructive) {
+                            showingDebugMenu = true
+                        } label: {
+                            Label("Clear All Data", systemImage: "trash")
                         }
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                        Image(systemName: "ellipsis")
                             .symbolRenderingMode(.hierarchical)
                     }
                 }
@@ -249,6 +274,7 @@ struct ContentView: View {
                 }
             }
             .task {
+                guard !isPreview else { return }
                 await loadData()
             }
             .refreshable {
@@ -259,25 +285,44 @@ struct ContentView: View {
     
     // MARK: - Debug Actions
 
-    private func fillWithTestData() async {
+    public func fillWithTestData() async {
         guard let moviesCollection = collections.first(where: { $0.name == "Movies" }),
               let booksCollection = collections.first(where: { $0.name == "Books" }),
               let gamesCollection = collections.first(where: { $0.name == "Games" }) else {
             return
         }
 
-        let testData: [(String?, String, String, ScoreRating, TimeInterval, [String: String])] = [
-            (moviesCollection.id, "Inception", "A mind-bending masterpiece by Christopher Nolan about dream invasion.", .great, 0, ["Year": "2010", "Genre": "Sci-Fi, Thriller"]),
-            (moviesCollection.id, "The Dark Knight", "Heath Ledger's iconic Joker performance.", .great, -86400 * 2, ["Year": "2008", "Genre": "Action, Drama"]),
-            (booksCollection.id, "1984", "Orwell's dystopian vision of totalitarian future.", .great, -86400 * 5, ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"]),
-            (booksCollection.id, "Dune", "Epic science fiction masterpiece.", .okay, -86400 * 10, ["Year": "1965", "Genre": "Sci-Fi", "Author": "Frank Herbert"]),
-            (gamesCollection.id, "Elden Ring", "Challenging but incredibly rewarding open-world adventure.", .great, -86400 * 14, ["Year": "2022", "Genre": "Action RPG", "Platform": "PC"]),
-            (gamesCollection.id, "Cyberpunk 2077", "Finally fixed and pretty good now.", .okay, -86400 * 20, ["Year": "2020", "Genre": "RPG", "Platform": "PlayStation"]),
-            (nil, "Concert: Radiohead", "Amazing live performance, goosebumps throughout.", .great, -86400 * 30, [:]),
-            (nil, "Cooking Class", "Learned to make pasta from scratch. Meh instructor.", .bad, -86400 * 45, [:])
+        let testData: [(String?, String, String, ScoreRating, TimeInterval, [String: String], [String])] = [
+            (moviesCollection.id, "Inception", "A mind-bending masterpiece by Christopher Nolan about dream invasion.",
+             .great, 0, ["Year": "2010", "Genre": "Sci-Fi, Thriller"],
+             ["00000000-0000-0000-0001-000000000001"]),
+            (moviesCollection.id, "The Dark Knight", "Heath Ledger's iconic Joker performance.",
+             .great, -86400 * 2, ["Year": "2008", "Genre": "Action, Drama"],
+             ["00000000-0000-0000-0001-000000000004"]),
+            (booksCollection.id, "XXX", "Orwell's dystopian vision of totalitarian future.",
+             .great, -86400 * 5, ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"],
+             []),
+            (booksCollection.id, "1984", "Orwell's dystopian vision of totalitarian future.",
+             .great, -86400 * 5, ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"],
+             ["00000000-0000-0000-0001-000000000002"]),
+            (booksCollection.id, "Dune", "Epic science fiction masterpiece.",
+             .okay, -86400 * 10, ["Year": "1965", "Genre": "Sci-Fi", "Author": "Frank Herbert"],
+             []),
+            (gamesCollection.id, "Elden Ring", "Challenging but incredibly rewarding open-world adventure.",
+             .great, -86400 * 14, ["Year": "2022", "Genre": "Action RPG", "Platform": "PC"],
+             ["00000000-0000-0000-0001-000000000003"]),
+            (gamesCollection.id, "Cyberpunk 2077", "Finally fixed and pretty good now.",
+             .okay, -86400 * 20, ["Year": "2020", "Genre": "RPG", "Platform": "PlayStation"],
+             []),
+            (nil, "Concert: Radiohead", "Amazing live performance, goosebumps throughout.",
+             .great, -86400 * 30, [:],
+             ["00000000-0000-0000-0001-000000000005"]),
+            (nil, "Cooking Class", "Learned to make pasta from scratch. Meh instructor.",
+             .bad, -86400 * 45, [:],
+             [])
         ]
 
-        for (collectionID, title, description, score, dateOffset, fields) in testData {
+        for (collectionID, title, description, score, dateOffset, fields, seedIDs) in testData {
             do {
                 _ = try await EntryService.shared.createEntry(
                     collectionID: collectionID,
@@ -286,7 +331,8 @@ struct ContentView: View {
                     score: score,
                     date: Date().addingTimeInterval(dateOffset),
                     additionalFields: fields,
-                    imageData: []
+                    imageData: [],
+                    seedImageIDs: seedIDs
                 )
             } catch {
                 errorMessage = "Failed to create test entry: \(error.localizedDescription)"
@@ -665,6 +711,13 @@ struct EmptyStateView: View {
     }
 }
 
-#Preview {
+#Preview("Empty State") {
     ContentView()
+}
+
+#Preview("With Entries") {
+    ContentView(
+        previewItems: EntryModel.previewItems,
+        previewCollections: CollectionModel.previewCollections
+    )
 }
