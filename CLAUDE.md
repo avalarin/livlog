@@ -7,8 +7,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **livlog** is an app that helps users track and rate their experiences with movies, books, games, and other activities. The app features AI-powered smart entry with automatic metadata and image fetching via LLM.
 
 Project consist of:
-- iOS App: SwiftUI-based iOS application
-- Backend: Golang-based backend service
+- iOS App: SwiftUI-based iOS application (`./livloios`)
+- Backend: Golang-based backend service (`./backend`)
+
+### Key concepts
+
+* Entry — the main unit for storing info in the app. Users add entries to remember which movies they’ve watched or which books they want to read.
+* Collection — entries are grouped into collections. These are folders you can share with friends.
+
+#### Screens
+
+* ContentView — the main screen for browsing the entries collection. From here you can create new entries, view them, delete them, and use filters.
+* AddEntryView — the entry creation screen, where you can choose the type and use the AI assistant.
 
 ## Agreements
 
@@ -16,14 +26,30 @@ Project consist of:
 
 **MANDATORY**: After completing ANY code changes, you MUST run the following checks in order:
 
-1. **Linting**: `swiftlint` - Fix all errors and warnings
-2. **Build**: `xcodebuild -scheme livlogios -configuration Debug build` - Ensure project compiles
-3. **Tests**: `xcodebuild test -scheme livlogios -destination 'platform=iOS Simulator,name=iPhone 15'` - Verify all tests pass
-4. **Documentation**: All documentation must be written in English in stored in docs/
+1. **Linting**: Call the linter and fix all errors and warnings
+2. **Build**: Call the builder and ensure project compiles
+3. **Tests**: Run all tests and verify all of these pass
+4. **Documentation**: All documentation must be written in English in stored in `./docs/`
 
 **Do NOT consider a task complete until all three checks pass successfully.** If any check fails, fix the issues before proceeding or asking for further instructions.
 
-## Build and Run
+### Code Standards
+
+#### Swift / SwiftUI
+- Use `@Environment`, `@State`, `@Binding` appropriately — prefer environment over prop drilling
+- Prefer `async/await` over completion handlers
+- Use `guard let` / `if let` for optionals — no force-unwrapping
+- Keep Views small — extract subviews when body exceeds ~30 lines
+- Follow modifier order: layout → styling → behavior
+
+### Go / Backend
+- Return errors — never panic in library code
+- Use context propagation for cancellation
+- Keep handler functions thin — delegate to service layer
+
+## Project build and verify commands
+
+### iOS project commands
 
 ```bash
 # Build the project
@@ -42,86 +68,15 @@ xcodebuild test -scheme livlogios -destination 'platform=iOS Simulator,name=iPho
 xcodebuild clean -scheme livlogios
 ```
 
-## Linting
-
-The project uses SwiftLint for code quality enforcement. Configuration is in `.swiftlint.yml`.
+### Go / Backend project commands
 
 ```bash
-# Run linting (must pass before committing)
-swiftlint
+# Build the project
+just --justfile ./backend/Justfile --working-directory ./backend build
 
-# Auto-fix issues where possible
-swiftlint --fix
+# Run tests
+just --justfile ./backend/Justfile --working-directory ./backend lint
 
-# Lint specific directory
-swiftlint lint --path livlogios/
-
-# Strict mode (warnings as errors)
-swiftlint --strict
+# Run unit tests only
+just --justfile ./backend/Justfile --working-directory ./backend test
 ```
-
-**Common SwiftLint fixes:**
-- Line length violations: Break long lines at 120 characters
-- Force unwrapping: Replace `!` with safe unwrapping (`if let`, `guard let`, `??`)
-- Trailing whitespace: Remove spaces at end of lines (or use `swiftlint --fix`)
-
-**Installation** (if not installed):
-```bash
-brew install swiftlint
-```
-
-## Architecture
-
-### Data Layer (SwiftData)
-
-The app uses SwiftData for persistence with two main models:
-
-- **Collection** (`Models/Item.swift`): Organizes entries into categories (Movies, Books, Games). Each collection has a name, emoji icon, and cascade-deletes its items.
-- **Item** (`Models/Item.swift`): Individual log entries with title, description, score rating (bad/okay/great), date, and dynamic additional fields (Year, Genre, Author, Platform). Supports 1-3 images stored as Data.
-
-The ModelContainer is initialized in `livlogiosApp.swift` with automatic creation of default collections on first launch.
-
-### View Structure
-
-**Main Views:**
-- `ContentView.swift`: Home screen with filterable grid of entries, search, and collection filters. Contains debug utilities (test data fill, clear all data).
-- `AddEntryView.swift`: Manual entry creation/editing with collection picker, dynamic fields (Year, Genre, Author, Platform), photo picker (up to 3 images), and score/date selectors.
-- `SmartAddEntryView.swift`: AI-powered entry creation flow with two-phase UI (search → confirmation). Searches OpenRouter API, downloads images automatically, and pre-fills metadata.
-- `EntryDetailView.swift`: Detail view for viewing/editing individual entries.
-- `CollectionsView.swift`: Collection management interface.
-
-**Key UI Patterns:**
-- Two-column lazy grid layout for entry cards
-- Horizontal scrolling filter pills for collections
-- Material design with rounded corners, shadows, and blur effects
-- Empty state guidance for new users
-
-### Services
-
-**OpenAIService** (`Services/OpenAIService.swift`):
-- Uses OpenRouter API (https://openrouter.ai) with Perplexity Sonar model
-- `searchOptions(for:)`: Searches for movies/books/games and returns structured JSON with title, type, year, genre, description, and image URLs
-- `downloadImages(for:)`: Downloads up to 3 images with compression and validation
-- Handles JSON response cleaning (removes markdown code blocks from LLM output)
-
-**API Configuration:**
-- Base URL: `https://openrouter.ai/api/v1/chat/completions`
-- Model: `perplexity/sonar`
-- API key is hardcoded in `OpenAIService.swift:12` (should be moved to environment variable or secure storage)
-
-## Key Implementation Details
-
-### Dynamic Fields Architecture
-
-Items support flexible metadata via `additionalFields: [String: String]` dictionary. The UI provides predefined field inputs (Year, Genre, Author, Platform) that map to this dictionary, but the system supports arbitrary key-value pairs.
-
-### Image Handling
-
-- Images are stored as compressed JPEG Data (0.8 quality) in the Item model
-- First image is designated as the "cover" and displayed prominently
-- SmartAdd automatically downloads and compresses images from search results
-- Manual entry uses PhotosPicker with 3-image limit
-
-### Collection Matching
-
-SmartAdd auto-selects collections by fuzzy matching the entry type (from API) against collection names. For example, `entryType: "movie"` matches `Collection.name: "Movies"`.
