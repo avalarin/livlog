@@ -10,6 +10,28 @@ Project consist of:
 - iOS App: SwiftUI-based iOS application (`./livloios`)
 - Backend: Golang-based backend service (`./backend`)
 
+## Sub-agent routing rules
+
+**Parallel dispatch** (ALL conditions met):
+- 3+ unrelated tasks or independent domains
+- No shared state between tasks
+- Clear file boundaries with no overlap
+
+**Sequential dispatch** (ANY condition):
+- Tasks have dependencies (B needs A's output)
+- Shared files or state (merge conflict risk)
+- Unclear scope requiring analysis first
+
+**Direct execution** (no subagent needed):
+- Simple, bounded task affecting a single component
+- Quick fixes under ~20 lines
+- Tasks where spawning a subagent adds overhead without value
+
+**Routing by intent**:
+- New feature request / bug → system-analyst first, then software-engineer
+- Already-scoped task with clear spec → software-engineer directly
+- Refactoring → code-reviewer for analysis, then software-engineer
+
 ### Key concepts
 
 * Entry — the main unit for storing info in the app. Users add entries to remember which movies they’ve watched or which books they want to read.
