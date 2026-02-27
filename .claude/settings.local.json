@@ -14,7 +14,9 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(just:*)",
-      "mcp__xcodebuildmcp__*"
+      "mcp__xcodebuildmcp__*",
+      "Bash(xcrun simctl:*)",
+      "Bash(git diff:*)"
     ]
   },
   "hooks": {
