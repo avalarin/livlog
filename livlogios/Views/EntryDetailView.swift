@@ -13,7 +13,7 @@ struct EntryDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(entryID: String, myRole: CollectionRole = .owner) {
+    init(entryID: String, myRole: CollectionRole = .read) {
         self.entryID = entryID
         self.myRole = myRole
     }
@@ -180,17 +180,15 @@ struct EntryDetailView: View {
                 .ignoresSafeArea(edges: .top)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        HStack(spacing: 12) {
-                            if myRole.canWrite {
+                    if myRole.canWrite {
+                        ToolbarItem(placement: .primaryAction) {
+                            HStack(spacing: 12) {
                                 Button {
                                     showingEditSheet = true
                                 } label: {
                                     Image(systemName: "pencil.circle")
                                 }
-                            }
 
-                            if myRole.canWrite {
                                 Menu {
                                     Button(role: .destructive) {
                                         showingDeleteAlert = true

@@ -193,7 +193,7 @@ struct ContentView: View {
             .ignoresSafeArea()
 
             if items.isEmpty && !isLoading {
-                EmptyStateView(showingAddEntry: $showingAddEntry)
+                EmptyStateView(showingAddEntry: $showingAddEntry, canWrite: collection.myRole.canWrite)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -282,7 +282,7 @@ struct ContentView: View {
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    if !isSelectMode {
+                    if !isSelectMode && collection.myRole.canWrite {
                         HStack {
                             Spacer()
                                 Button {
@@ -678,6 +678,7 @@ struct EntryListRow: View {
 
 struct EmptyStateView: View {
     @Binding var showingAddEntry: Bool
+    var canWrite: Bool = true
 
     var body: some View {
         VStack(spacing: 24) {
@@ -695,22 +696,24 @@ struct EmptyStateView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Button {
-                showingAddEntry = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus")
-                        .fontWeight(.semibold)
-                    Text("Add First Entry")
-                        .fontWeight(.semibold)
+            if canWrite {
+                Button {
+                    showingAddEntry = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .fontWeight(.semibold)
+                        Text("Add First Entry")
+                            .fontWeight(.semibold)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 14)
+                    .background(
+                        Capsule()
+                            .fill(Color.accentColor)
+                    )
+                    .foregroundStyle(.white)
                 }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .background(
-                    Capsule()
-                        .fill(Color.accentColor)
-                )
-                .foregroundStyle(.white)
             }
         }
         .padding()

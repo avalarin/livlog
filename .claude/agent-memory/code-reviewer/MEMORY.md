@@ -179,5 +179,41 @@
 - **[code-smell] find-entries and add-entries both use hardcoded magic value 100 for DB fetch limit** — seen 1 time
   - Last seen: mcp_protocol_handler.go:401 (GetEntriesByUserID called with literal 100; same constant as maxAddEntriesBatch but not reused; a named constant would make the relationship explicit)
 
-- **[code-smell] get-collections tool uses a local collectionResult struct where mcpEntryResult pattern could be generalised** — seen 1 time
-  - Last seen: mcp_protocol_handler.go:115-130 (collectionResult, fieldResult, typeResult all defined as closure-local anonymous structs; no shared DTO layer; pattern will keep growing as tools are added)
+- **[bug] UpdateEntry collection role check only validates target collection, not current one** — seen 1 time (FIXED)
+  - Last seen: entry_service.go:219-235 — existing.CollectionID now checked first; both current and target collection write-access verified; nil collectionID path now falls back to owner-only check
+
+- **[bug] isUniqueViolation uses string-matching instead of typed pgx error** — seen 1 time (FIXED)
+  - Last seen: collection_repository.go:393-395 — now uses errors.As(*pgconn.PgError) and compares Code == "23505"
+
+- **[security] TOCTOU race in RemoveShare last-owner guard** — seen 1 time (FIXED)
+  - Last seen: collection_repository.go:280-329 — last-owner guard now runs inside a single transaction with FOR UPDATE row lock
+
+- **[security] BulkDelete uses creator-only auth while single Delete uses collection-role auth — inconsistent** — seen 1 time (FIXED)
+  - Last seen: entry_repository.go:563-588 — DeleteEntriesByIDs now mirrors single-delete logic: allows creator OR owner/write role via EXISTS subquery
+
+- **[security] Shared collection entries invisible to non-creator members** — seen 1 time (FIXED)
+  - Last seen: entry_repository.go:120-133 — GetEntriesByUserID now uses collection_shares EXISTS subquery when collectionID provided; GetEntryByID backed by GetUserRole for non-creator access
+
+- **[bug] ErrCollectionNotFound wrapped via fmt.Errorf loses sentinel** — seen 1 time (FIXED)
+  - Last seen: entry_handler.go:424-426 — handler now explicitly checks errors.Is(err, repository.ErrCollectionNotFound) for DeleteEntry
+
+- **[code-smell] Error compared by string value instead of sentinel** — seen 2 times (FIXED for CreateDefaultCollections)
+  - Last seen: collection_handler.go now uses errors.Is(err, service.ErrAlreadyHasCollections)
+
+- **[code-smell] Magic string role values** — seen 3 times
+  - Last seen: backend/internal/service/collection_service.go:91, 153, 185 + entry_service.go:117, 230, 265, 318 — inline string literals "owner", "write", "read" still scattered with no named constants
+
+- **[bug] Down migration too broad** — seen 2 times
+  - Last seen: backend/migrations/010_collection_shares_membership.down.sql — `WHERE owner_id = shared_with_user_id AND permission_level = 'owner'` still deletes legitimately-shared owner rows that happen to be self-invited; the backfill pattern (owner_id = shared_with_user_id) is ambiguous for rows where an owner later re-added themselves with their own ID as both inviter and invitee
+
+- **[bug] EntryDetailView edit sheet blank when entry has no collectionID** — seen 2 times
+  - Last seen: EntryDetailView.swift:208-213 — if entry.collectionID is nil the sheet body has no content; user taps edit, sheet appears empty with no feedback
+
+- **[wrong-layer] Placeholder CollectionModel constructed in view layer with fake data** — seen 2 times
+  - Last seen: EntryDetailView.swift:210 — CollectionModel(id: collectionID, name: "", icon: "📝") passed to AddEntryView because EntryDetailView holds only entryID, not the full model
+
+- **[bug] EntryDetailView default role is .owner in init** — seen 1 time
+  - Last seen: EntryDetailView.swift:16 — init(entryID:myRole:) defaults myRole to .owner; callers that forget the argument silently grant full write access; default should be .read
+
+- **[bug] GetUserRole returns ErrCollectionNotFound for non-member — misleading sentinel reuse** — seen 1 time
+  - Last seen: collection_repository.go:202-204 — when a user has no row in collection_shares, GetUserRole returns ErrCollectionNotFound; callers in entry_service.go treat that as "collection doesn't exist" and surface HTTP 404/403 correctly, but the semantic is "not a member", not "not found"; DeleteEntry wraps it as "invalid collection: %w" which the handler maps to 403, masking the real reason
