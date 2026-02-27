@@ -100,7 +100,7 @@ func main() {
 
 	// Initialize collection, entry, and type services
 	collectionService := service.NewCollectionService(collectionRepo)
-	entryService := service.NewEntryService(entryRepo, collectionRepo)
+	entryService := service.NewEntryService(entryRepo, collectionRepo, typeRepo)
 	typeService := service.NewTypeService(typeRepo)
 
 	// Initialize AI search service

@@ -30,11 +30,12 @@ type createTypeRequest struct {
 }
 
 type typeResponse struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Icon      string `json:"icon"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID        string                        `json:"id"`
+	Name      string                        `json:"name"`
+	Icon      string                        `json:"icon"`
+	Fields    []repository.FieldDefinition  `json:"fields"`
+	CreatedAt string                        `json:"created_at"`
+	UpdatedAt string                        `json:"updated_at"`
 }
 
 func (h *TypeHandler) GetTypes(w http.ResponseWriter, r *http.Request) {
@@ -97,10 +98,15 @@ func (h *TypeHandler) CreateType(w http.ResponseWriter, r *http.Request) {
 }
 
 func mapTypeToResponse(t *repository.EntryType) typeResponse {
+	fields := t.Fields
+	if fields == nil {
+		fields = []repository.FieldDefinition{}
+	}
 	return typeResponse{
 		ID:        t.ID.String(),
 		Name:      t.Name,
 		Icon:      t.Icon,
+		Fields:    fields,
 		CreatedAt: t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt: t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}

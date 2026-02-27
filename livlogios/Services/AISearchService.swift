@@ -29,7 +29,6 @@ actor AISearchService {
         let genre: String?
         let author: String?
         let platform: String?
-        let summaryLine: String
         let description: String
         let imageUrls: [String]
         var downloadedImages: [Data] = []
@@ -61,7 +60,6 @@ actor AISearchService {
         let genre: String?
         let author: String?
         let platform: String?
-        let summaryLine: String
         let description: String
         let imageUrls: [String]
 
@@ -74,7 +72,6 @@ actor AISearchService {
                 genre: genre,
                 author: author,
                 platform: platform,
-                summaryLine: summaryLine,
                 description: description,
                 imageUrls: imageUrls
             )

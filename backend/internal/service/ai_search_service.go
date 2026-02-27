@@ -22,25 +22,24 @@ var (
 )
 
 type AISearchService struct {
-	cfg         *config.Config
-	usageRepo   *repository.AISearchUsageRepository
-	userRepo    *repository.UserRepository
-	httpClient  *http.Client
-	ratePeriod  time.Duration
-	logger      *zap.Logger
+	cfg        *config.Config
+	usageRepo  *repository.AISearchUsageRepository
+	userRepo   *repository.UserRepository
+	httpClient *http.Client
+	ratePeriod time.Duration
+	logger     *zap.Logger
 }
 
 type SearchOption struct {
-	ID          string            `json:"id"`
-	Title       string            `json:"title"`
-	EntryType   string            `json:"entryType"`
-	Year        string            `json:"year,omitempty"`
-	Genre       string            `json:"genre,omitempty"`
-	Author      string            `json:"author,omitempty"`
-	Platform    string            `json:"platform,omitempty"`
-	SummaryLine string            `json:"summaryLine"`
-	Description string            `json:"description"`
-	ImageURLs   []string          `json:"imageUrls"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	EntryType   string   `json:"entryType"`
+	Year        string   `json:"year,omitempty"`
+	Genre       string   `json:"genre,omitempty"`
+	Author      string   `json:"author,omitempty"`
+	Platform    string   `json:"platform,omitempty"`
+	Description string   `json:"description"`
+	ImageURLs   []string `json:"imageUrls"`
 }
 
 // DTO for parsing OpenRouter response
@@ -51,7 +50,6 @@ type searchOptionDTO struct {
 	Genre       string   `json:"genre,omitempty"`
 	Author      string   `json:"author,omitempty"`
 	Platform    string   `json:"platform,omitempty"`
-	SummaryLine string   `json:"summaryLine"`
 	Description string   `json:"description"`
 	ImageURLs   []string `json:"imageUrls,omitempty"`
 }
@@ -171,7 +169,6 @@ func (s *AISearchService) SearchOptions(ctx context.Context, userID uuid.UUID, q
 			Genre:       option.Genre,
 			Author:      option.Author,
 			Platform:    option.Platform,
-			SummaryLine: option.SummaryLine,
 			Description: option.Description,
 			ImageURLs:   []string{},
 		}
@@ -209,12 +206,11 @@ For each option provide:
 - genre: genre(s)
 - author: author name (for books only, null otherwise)
 - platform: gaming platform (for games only, null otherwise)
-- summaryLine: a short one-line summary with the most important info, tailored to its type. Examples: for movies "2023 • Sci-Fi, Thriller • Christopher Nolan", for books "2020 • Fantasy • Brandon Sanderson", for games "2022 • RPG • PlayStation 5, PC". Use bullet separator •
 - description: brief 1-2 sentence description
 - imageUrls: array of up to 3 image URLs (posters, covers, screenshots) - direct links to images
 
 Return ONLY valid JSON in this exact format, no markdown, no extra text:
-{"options": [{"title": "...", "entryType": "...", "year": "...", "genre": "...", "author": null, "platform": null, "summaryLine": "...", "description": "...", "imageUrls": ["url1", "url2"]}]}`, query)
+{"options": [{"title": "...", "entryType": "...", "year": "...", "genre": "...", "author": null, "platform": null, "description": "...", "imageUrls": ["url1", "url2"]}]}`, query)
 
 	requestBody := map[string]interface{}{
 		"model": s.cfg.OpenRouter.Model,

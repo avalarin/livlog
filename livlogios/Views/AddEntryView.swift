@@ -20,8 +20,15 @@ struct AddEntryView: View {
 
     var isEditing: Bool { editingEntryID != nil }
 
-    @State private var types: [EntryTypeModel] = []
+    @State private var types: [EntryTypeModel]
+
+    init(collection: CollectionModel, editingEntryID: String? = nil, initialTypes: [EntryTypeModel] = []) {
+        self.collection = collection
+        self.editingEntryID = editingEntryID
+        self._types = State(initialValue: initialTypes)
+    }
     @State private var selectedType: EntryTypeModel?
+    @State private var additionalFieldValues: [String: String] = [:]
     @State private var title: String = ""
     @State private var entryDescription: String = ""
     @State private var score: ScoreRating = .undecided
@@ -51,9 +58,11 @@ struct AddEntryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 12) {
                     typePickerSection
-                    textSection
+                    titleSection
+                    additionalFieldsSection
+                    notesSection
                     imagesSection
                 }
                 .padding(.vertical)
@@ -139,6 +148,10 @@ struct AddEntryView: View {
                     await loadImages(from: newValue)
                 }
             }
+            .onChange(of: selectedType) { _, newType in
+                let newFieldKeys = Set(newType?.fields.map { $0.key } ?? [])
+                additionalFieldValues = additionalFieldValues.filter { newFieldKeys.contains($0.key) }
+            }
             .task {
                 await loadData()
             }
@@ -192,33 +205,62 @@ struct AddEntryView: View {
     }
 
     @ViewBuilder
-    private var textSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TextField("Title", text: $title)
-                .textFieldStyle(.plain)
-                .bold()
-                .padding(.horizontal, 12)
-                .focused($focus, equals: .title)
+    private var titleSection: some View {
+        TextField("Title", text: $title)
+            .textFieldStyle(.plain)
+            .bold()
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .focused($focus, equals: .title)
+    }
 
-            ZStack(alignment: .topLeading) {
-                if true {
-                    Text("Details, e.g. year, genre...")
-                        .foregroundColor(.secondary)
-                        .padding(4)
-                        .padding(.top, 4)
-                }
-
-                TextEditor(text: $entryDescription)
-                    .opacity(entryDescription.isEmpty ? 0.25 : 1)
-                    .contentMargins(.zero)
-                    .foregroundColor(.primary)
-                    .padding(.zero)
-                    .focused($focus, equals: .notes)
+    @ViewBuilder
+    private var notesSection: some View {
+        ZStack(alignment: .topLeading) {
+            if entryDescription.isEmpty {
+                Text("Notes, thoughts, review...")
+                    .foregroundColor(.secondary)
+                    .padding(4)
+                    .padding(.top, 4)
             }
-            .frame(minHeight: 120)
-            .padding(.horizontal, 8)
+
+            TextEditor(text: $entryDescription)
+                .opacity(entryDescription.isEmpty ? 0.25 : 1)
+                .contentMargins(.zero)
+                .foregroundColor(.primary)
+                .padding(.zero)
+                .focused($focus, equals: .notes)
         }
-        .padding(.horizontal, 8)
+        .frame(minHeight: 120)
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private var additionalFieldsSection: some View {
+        if let entryType = selectedType, !entryType.fields.isEmpty {
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 12) {
+                ForEach(entryType.fields, id: \.key) { field in
+                    AdditionalFieldCell(field: field, value: fieldBinding(for: field.key))
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private func fieldBinding(for key: String) -> Binding<String> {
+        Binding(
+            get: { additionalFieldValues[key] ?? "" },
+            set: { newValue in
+                if newValue.isEmpty {
+                    additionalFieldValues.removeValue(forKey: key)
+                } else {
+                    additionalFieldValues[key] = newValue
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -235,13 +277,15 @@ struct AddEntryView: View {
 
     @ViewBuilder
     private var imagesList: some View {
-        ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
+        ForEach(Array(selectedImages.enumerated()), id: \.offset) { item in
             ImageThumbnail(
-                image: image,
-                index: index,
+                image: item.element,
+                index: item.offset,
                 onDelete: {
                     withAnimation {
-                        _ = selectedImages.remove(at: index)
+                        if let i = selectedImages.firstIndex(where: { $0 === item.element }) {
+                            _ = selectedImages.remove(at: i)
+                        }
                     }
                 }
             )
@@ -253,16 +297,9 @@ struct AddEntryView: View {
     private func applyOptionToEntry(_ option: AISearchService.EntryOption) {
         title = option.title
 
-        var notesText = ""
+        entryDescription = option.description
 
-        if !option.summaryLine.isEmpty {
-            notesText = option.summaryLine + "\n"
-        }
-
-        notesText += option.description
-        entryDescription = notesText
-
-        // Auto-select type based on AI suggestion
+        // Auto-select type and apply additional fields from AI suggestion
         let entryTypeName: String
         switch option.entryType.lowercased() {
         case "movie": entryTypeName = "Movie"
@@ -272,8 +309,17 @@ struct AddEntryView: View {
         case "music": entryTypeName = "Music"
         default: entryTypeName = ""
         }
-        if !entryTypeName.isEmpty, let matchedType = types.first(where: { $0.name == entryTypeName }) {
-            selectedType = matchedType
+        if !entryTypeName.isEmpty, let newType = types.first(where: { $0.name == entryTypeName }) {
+            selectedType = newType
+            // Preserve existing values, overlay AI suggestions filtered to the new type's fields
+            let newFieldKeys = Set(newType.fields.map { $0.key })
+            var merged = additionalFieldValues.filter { newFieldKeys.contains($0.key) }
+            let aiFields = option.additionalFields
+            // TODO: Music type "Artist" key has no matching AI field yet; Year will still be populated.
+            for (key, value) in aiFields where newFieldKeys.contains(key) {
+                merged[key] = value
+            }
+            additionalFieldValues = merged
         }
 
         Task {
@@ -304,6 +350,9 @@ struct AddEntryView: View {
                     selectedType = types.first { $0.id == typeID }
                 }
 
+                // Load additional fields for editing
+                additionalFieldValues = entry.additionalFields
+
                 selectedImages = await loadImages(imageIDs: entry.images)
             }
         } catch {
@@ -316,12 +365,18 @@ struct AddEntryView: View {
 
     private func loadImages(from items: [PhotosPickerItem]) async {
         for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { continue }
                 await MainActor.run {
                     if selectedImages.count < 3 {
                         selectedImages.append(image)
                     }
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to load photo: \(error.localizedDescription)"
+                    showError = true
                 }
             }
         }
@@ -331,22 +386,30 @@ struct AddEntryView: View {
     }
 
     private func loadImages(imageIDs: [ImageMeta]) async -> [UIImage] {
-        await withTaskGroup(of: (Int, UIImage?).self) { group in
+        typealias TaskResult = (index: Int, image: UIImage?, error: String?)
+        let results = await withTaskGroup(of: TaskResult.self) { group in
             for (index, imageMeta) in imageIDs.enumerated() {
                 group.addTask {
-                    guard let data = try? await EntryService.shared.getImage(imageID: imageMeta.id),
-                          let uiImage = UIImage(data: data) else {
-                        return (index, nil)
+                    do {
+                        let data = try await EntryService.shared.getImage(imageID: imageMeta.id)
+                        guard let uiImage = UIImage(data: data) else {
+                            return (index, nil, nil)
+                        }
+                        return (index, uiImage, nil)
+                    } catch {
+                        return (index, nil, error.localizedDescription)
                     }
-                    return (index, uiImage)
                 }
             }
-            var results: [(Int, UIImage?)] = []
-            for await result in group {
-                results.append(result)
-            }
-            return results.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
+            var collected: [TaskResult] = []
+            for await result in group { collected.append(result) }
+            return collected
         }
+        if let msg = results.compactMap({ $0.error }).first {
+            errorMessage = "Failed to load image: \(msg)"
+            showError = true
+        }
+        return results.sorted { $0.index < $1.index }.compactMap { $0.image }
     }
 
     private func saveEntry() async {
@@ -365,7 +428,7 @@ struct AddEntryView: View {
                     description: entryDescription,
                     score: score,
                     date: date,
-                    additionalFields: [:],
+                    additionalFields: additionalFieldValues,
                     imageData: imageData.isEmpty ? nil : imageData
                 )
             } else {
@@ -376,11 +439,12 @@ struct AddEntryView: View {
                     description: entryDescription,
                     score: score,
                     date: date,
-                    additionalFields: [:],
+                    additionalFields: additionalFieldValues,
                     imageData: imageData
                 )
             }
 
+            isSaving = false
             dismiss()
         } catch {
             errorMessage = "Failed to save entry: \(error.localizedDescription)"
@@ -391,6 +455,28 @@ struct AddEntryView: View {
 }
 
 // MARK: - Supporting Views
+
+struct AdditionalFieldCell: View {
+    let field: FieldDefinition
+    @Binding var value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(field.label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("", text: $value)
+                .keyboardType(field.isNumber ? .decimalPad : .default)
+                .textFieldStyle(.plain)
+                .font(.subheadline)
+                .fontWeight(.medium)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
 
 struct ImageThumbnail: View {
     let image: UIImage
@@ -849,5 +935,5 @@ struct ScoreOptionButton: View {
 }
 
 #Preview {
-    AddEntryView(collection: CollectionModel.previewMyList)
+    AddEntryView(collection: CollectionModel.previewMyList, initialTypes: EntryTypeModel.previewTypes)
 }

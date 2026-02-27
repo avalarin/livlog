@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,21 +16,61 @@ var (
 	ErrInvalidTitle       = errors.New("title must be between 1 and 200 characters")
 	ErrInvalidDescription = errors.New("description must be between 1 and 2000 characters")
 	ErrInvalidScore       = errors.New("score must be between 0 and 3")
+	ErrInvalidFieldValue  = errors.New("additional field has invalid value for its type")
 )
 
 type EntryService struct {
 	entryRepo      *repository.EntryRepository
 	collectionRepo *repository.CollectionRepository
+	typeRepo       *repository.TypeRepository
 }
 
 func NewEntryService(
 	entryRepo *repository.EntryRepository,
 	collectionRepo *repository.CollectionRepository,
+	typeRepo *repository.TypeRepository,
 ) *EntryService {
 	return &EntryService{
 		entryRepo:      entryRepo,
 		collectionRepo: collectionRepo,
+		typeRepo:       typeRepo,
 	}
+}
+
+// validateAdditionalFields checks that number-typed fields contain parseable numeric values.
+// Unknown field keys are silently ignored for forward compatibility.
+func (s *EntryService) validateAdditionalFields(
+	ctx context.Context,
+	typeID *uuid.UUID,
+	additionalFields map[string]string,
+) error {
+	if typeID == nil || len(additionalFields) == 0 {
+		return nil
+	}
+
+	entryType, err := s.typeRepo.GetTypeByID(ctx, *typeID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch type for field validation: %w", err)
+	}
+
+	fieldsByKey := make(map[string]repository.FieldDefinition, len(entryType.Fields))
+	for _, f := range entryType.Fields {
+		fieldsByKey[f.Key] = f
+	}
+
+	for key, value := range additionalFields {
+		fieldDef, known := fieldsByKey[key]
+		if !known || value == "" {
+			continue
+		}
+		if fieldDef.Type == "number" {
+			if _, err := strconv.ParseFloat(value, 64); err != nil {
+				return fmt.Errorf("%w: field %q expects a number", ErrInvalidFieldValue, key)
+			}
+		}
+	}
+
+	return nil
 }
 
 // CreateEntry creates a new entry with validation
@@ -60,6 +101,11 @@ func (s *EntryService) CreateEntry(
 	// Validate score
 	if score < 0 || score > 3 {
 		return nil, ErrInvalidScore
+	}
+
+	// Validate additional field values against the type's field schema
+	if err := s.validateAdditionalFields(ctx, typeID, additionalFields); err != nil {
+		return nil, err
 	}
 
 	// Validate collection ownership if provided
@@ -183,6 +229,11 @@ func (s *EntryService) UpdateEntry(
 	// Validate score
 	if score < 0 || score > 3 {
 		return nil, ErrInvalidScore
+	}
+
+	// Validate additional field values against the type's field schema
+	if err := s.validateAdditionalFields(ctx, typeID, additionalFields); err != nil {
+		return nil, err
 	}
 
 	// Validate collection ownership if provided

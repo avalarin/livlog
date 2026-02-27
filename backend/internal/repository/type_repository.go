@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -15,13 +16,21 @@ var (
 	ErrTypeNotFound = errors.New("entry type not found")
 )
 
+// FieldDefinition describes a single structured metadata field on an entry type.
+type FieldDefinition struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Type  string `json:"type"` // "string" or "number"
+}
+
 type EntryType struct {
-	ID        uuid.UUID  `json:"id"`
-	UserID    *uuid.UUID `json:"user_id,omitempty"`
-	Name      string     `json:"name"`
-	Icon      string     `json:"icon"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID        uuid.UUID         `json:"id"`
+	UserID    *uuid.UUID        `json:"user_id,omitempty"`
+	Name      string            `json:"name"`
+	Icon      string            `json:"icon"`
+	Fields    []FieldDefinition `json:"fields"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
 }
 
 type TypeRepository struct {
@@ -38,10 +47,12 @@ func (r *TypeRepository) GetAllTypes(
 	userID uuid.UUID,
 ) ([]*EntryType, error) {
 	query := `
-		SELECT id, user_id, name, icon, created_at, updated_at
+		SELECT id, user_id, name, icon, fields, created_at, updated_at
 		FROM entry_types
 		WHERE user_id IS NULL OR user_id = $1
-		ORDER BY created_at ASC
+		ORDER BY
+			CASE WHEN user_id IS NULL AND name = 'Other' THEN 1 ELSE 0 END ASC,
+			created_at ASC
 	`
 
 	rows, err := r.db.Query(ctx, query, userID)
@@ -53,16 +64,21 @@ func (r *TypeRepository) GetAllTypes(
 	var types []*EntryType
 	for rows.Next() {
 		var t EntryType
+		var fieldsStr string
 		err := rows.Scan(
 			&t.ID,
 			&t.UserID,
 			&t.Name,
 			&t.Icon,
+			&fieldsStr,
 			&t.CreatedAt,
 			&t.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan entry type: %w", err)
+		}
+		if err := json.Unmarshal([]byte(fieldsStr), &t.Fields); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal type fields: %w", err)
 		}
 		types = append(types, &t)
 	}
@@ -80,17 +96,19 @@ func (r *TypeRepository) GetTypeByID(
 	id uuid.UUID,
 ) (*EntryType, error) {
 	query := `
-		SELECT id, user_id, name, icon, created_at, updated_at
+		SELECT id, user_id, name, icon, fields, created_at, updated_at
 		FROM entry_types
 		WHERE id = $1
 	`
 
 	var t EntryType
+	var fieldsStr string
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&t.ID,
 		&t.UserID,
 		&t.Name,
 		&t.Icon,
+		&fieldsStr,
 		&t.CreatedAt,
 		&t.UpdatedAt,
 	)
@@ -99,6 +117,10 @@ func (r *TypeRepository) GetTypeByID(
 			return nil, ErrTypeNotFound
 		}
 		return nil, fmt.Errorf("failed to get entry type: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(fieldsStr), &t.Fields); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal type fields: %w", err)
 	}
 
 	return &t, nil
@@ -113,20 +135,26 @@ func (r *TypeRepository) CreateType(
 	query := `
 		INSERT INTO entry_types (user_id, name, icon)
 		VALUES ($1, $2, $3)
-		RETURNING id, user_id, name, icon, created_at, updated_at
+		RETURNING id, user_id, name, icon, fields, created_at, updated_at
 	`
 
 	var t EntryType
+	var fieldsStr string
 	err := r.db.QueryRow(ctx, query, userID, name, icon).Scan(
 		&t.ID,
 		&t.UserID,
 		&t.Name,
 		&t.Icon,
+		&fieldsStr,
 		&t.CreatedAt,
 		&t.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create entry type: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(fieldsStr), &t.Fields); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal type fields: %w", err)
 	}
 
 	return &t, nil

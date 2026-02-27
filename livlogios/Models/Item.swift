@@ -94,12 +94,23 @@ struct CollectionModel: Codable, Identifiable {
     }
 }
 
+// MARK: - Field Definition
+
+struct FieldDefinition: Codable, Equatable {
+    let key: String
+    let label: String
+    let type: String // "string" or "number"
+
+    var isNumber: Bool { type == "number" }
+}
+
 // MARK: - Entry Type Model
 
-struct EntryTypeModel: Codable, Identifiable {
+struct EntryTypeModel: Codable, Identifiable, Equatable {
     let id: String
     let name: String
     let icon: String
+    let fields: [FieldDefinition]
     let createdAt: Date
     let updatedAt: Date
 
@@ -107,14 +118,16 @@ struct EntryTypeModel: Codable, Identifiable {
         case id
         case name
         case icon
+        case fields
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
 
-    init(id: String, name: String, icon: String, createdAt: Date = .now, updatedAt: Date = .now) {
+    init(id: String, name: String, icon: String, fields: [FieldDefinition] = [], createdAt: Date = .now, updatedAt: Date = .now) {
         self.id = id
         self.name = name
         self.icon = icon
+        self.fields = fields
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -125,6 +138,7 @@ struct EntryTypeModel: Codable, Identifiable {
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         icon = try container.decode(String.self, forKey: .icon)
+        fields = try container.decodeIfPresent([FieldDefinition].self, forKey: .fields) ?? []
 
         let iso8601Formatter = ISO8601DateFormatter()
         iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -166,6 +180,7 @@ struct EntryTypeModel: Codable, Identifiable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(icon, forKey: .icon)
+        try container.encode(fields, forKey: .fields)
 
         let iso8601Formatter = ISO8601DateFormatter()
         iso8601Formatter.formatOptions = [.withInternetDateTime]
@@ -375,10 +390,28 @@ extension CollectionModel {
 }
 
 extension EntryTypeModel {
-    static let previewMovie = EntryTypeModel(id: "movie", name: "Movie", icon: "🎬")
-    static let previewBook = EntryTypeModel(id: "book", name: "Book", icon: "📚")
-    static let previewGame = EntryTypeModel(id: "game", name: "Game", icon: "🎮")
-    static let previewTypes: [EntryTypeModel] = [previewMovie, previewBook, previewGame]
+    static let previewMovie = EntryTypeModel(id: "movie", name: "Movie", icon: "🎬", fields: [
+        FieldDefinition(key: "Year", label: "Year", type: "number"),
+        FieldDefinition(key: "Genre", label: "Genre", type: "string")
+    ])
+    static let previewBook = EntryTypeModel(id: "book", name: "Book", icon: "📚", fields: [
+        FieldDefinition(key: "Year", label: "Year", type: "number"),
+        FieldDefinition(key: "Author", label: "Author", type: "string")
+    ])
+    static let previewGame = EntryTypeModel(id: "game", name: "Game", icon: "🎮", fields: [
+        FieldDefinition(key: "Year", label: "Year", type: "number"),
+        FieldDefinition(key: "Platform", label: "Platform", type: "string")
+    ])
+    static let previewShow = EntryTypeModel(id: "show", name: "Show", icon: "📺", fields: [
+        FieldDefinition(key: "Year", label: "Year", type: "number"),
+        FieldDefinition(key: "Genre", label: "Genre", type: "string")
+    ])
+    static let previewMusic = EntryTypeModel(id: "music", name: "Music", icon: "🎵", fields: [
+        FieldDefinition(key: "Year", label: "Year", type: "number"),
+        FieldDefinition(key: "Artist", label: "Artist", type: "string")
+    ])
+    static let previewOther = EntryTypeModel(id: "other", name: "Other", icon: "📝")
+    static let previewTypes: [EntryTypeModel] = [previewMovie, previewBook, previewGame, previewShow, previewMusic, previewOther]
 }
 
 extension EntryModel {

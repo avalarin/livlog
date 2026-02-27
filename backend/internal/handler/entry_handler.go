@@ -223,7 +223,9 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidTitle) ||
 			errors.Is(err, service.ErrInvalidDescription) ||
-			errors.Is(err, service.ErrInvalidScore) {
+			errors.Is(err, service.ErrInvalidScore) ||
+			errors.Is(err, service.ErrInvalidFieldValue) ||
+			errors.Is(err, repository.ErrTypeNotFound) {
 			respondWithError(w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
@@ -361,7 +363,9 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, service.ErrInvalidTitle) ||
 			errors.Is(err, service.ErrInvalidDescription) ||
-			errors.Is(err, service.ErrInvalidScore) {
+			errors.Is(err, service.ErrInvalidScore) ||
+			errors.Is(err, service.ErrInvalidFieldValue) ||
+			errors.Is(err, repository.ErrTypeNotFound) {
 			respondWithError(w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
