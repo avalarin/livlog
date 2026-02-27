@@ -18,6 +18,7 @@ struct CollectionsView: View {
     @State private var isCreatingDefaults = false
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var showingSettings = false
 
     var body: some View {
         NavigationStack {
@@ -48,6 +49,14 @@ struct CollectionsView: View {
             .navigationTitle("My Collections")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gear")
+                    }
+                }
+
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingAddCollection = true
@@ -71,6 +80,9 @@ struct CollectionsView: View {
                             await loadData()
                         }
                     }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
             .alert("Delete Collection", isPresented: $showingDeleteAlert) {
                 Button("Cancel", role: .cancel) {

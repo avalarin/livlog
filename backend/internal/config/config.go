@@ -18,8 +18,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	PublicHost string `mapstructure:"public_host"`
 }
 
 type DatabaseConfig struct {
@@ -79,6 +80,15 @@ func (s *ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
+// PublicURL returns the full base URL for MCP endpoints.
+// Uses https scheme unless the host contains a port (local dev).
+func (s *ServerConfig) PublicURL() string {
+	if strings.Contains(s.PublicHost, ":") {
+		return fmt.Sprintf("http://%s", s.PublicHost)
+	}
+	return fmt.Sprintf("https://%s", s.PublicHost)
+}
+
 func (d *DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -97,6 +107,7 @@ func Load(configPath string) (*Config, error) {
 	// Set defaults
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.public_host", "localhost:8080")
 	v.SetDefault("database.host", "localhost")
 	v.SetDefault("database.port", 5432)
 	v.SetDefault("database.name", "livlog")

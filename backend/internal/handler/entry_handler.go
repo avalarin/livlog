@@ -47,7 +47,7 @@ func (h *EntryHandler) RegisterPublicRoutes(r chi.Router) {
 }
 
 type imageData struct {
-	Data     string `json:"data"`      // base64 encoded
+	Data     string `json:"data"` // base64 encoded
 	IsCover  bool   `json:"is_cover"`
 	Position int    `json:"position"`
 }
@@ -77,7 +77,6 @@ type entryResponse struct {
 	CreatedAt        string              `json:"created_at"`
 	UpdatedAt        string              `json:"updated_at"`
 }
-
 
 func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
@@ -424,7 +423,7 @@ func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 	if seedImg, err := h.entryService.GetSeedImageByID(r.Context(), imgID); err == nil {
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.WriteHeader(http.StatusOK)
-		w.Write(seedImg.ImageData)
+		_, _ = w.Write(seedImg.ImageData)
 		return
 	}
 
@@ -441,7 +440,7 @@ func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.WriteHeader(http.StatusOK)
-	w.Write(img.ImageData)
+	_, _ = w.Write(img.ImageData)
 }
 
 type bulkDeleteRequest struct {

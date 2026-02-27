@@ -47,7 +47,7 @@ func (r *AISearchUsageRepository) CheckAndIncrementUsage(
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	now := time.Now()
 	periodEnd := now.Add(period)

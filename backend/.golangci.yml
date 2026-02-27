@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
   modules-download-mode: readonly
@@ -6,17 +8,24 @@ linters:
   enable:
     # Default linters
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
     # Additional recommended linters
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+formatters-settings:
+  goimports:
+    local-prefixes:
+      - github.com/avalarin/livlog/backend
 
 linters-settings:
   errcheck:
@@ -26,8 +35,6 @@ linters-settings:
     enable-all: true
     disable:
       - fieldalignment
-  goimports:
-    local-prefixes: github.com/avalarin/livlog/backend
   misspell:
     locale: US
 

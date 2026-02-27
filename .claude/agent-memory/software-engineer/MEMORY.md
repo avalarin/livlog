@@ -34,6 +34,34 @@ NavigationStack(path: $path) { ... }
 }
 ```
 
+## Go patterns
+
+**mcp-go (mark3labs/mcp-go) SSE handler per-request pattern** — create a new `MCPServer` + `SSEServer` per HTTP request (not a singleton). This lets you inject per-user context (userID) into tool closures. Key API (v0.44.1):
+```go
+mcpSrv := server.NewMCPServer("name", "1.0.0")
+tool := mcp.NewTool("tool-name", mcp.WithDescription("..."), mcp.WithString("param", mcp.Required(), mcp.Description("...")))
+mcpSrv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+    args := req.Params.Arguments.(map[string]interface{})  // type-assert, not index directly
+    val := args["param"].(string)
+    return mcp.NewToolResultText(jsonStr), nil
+})
+sseServer := server.NewSSEServer(mcpSrv, server.WithBaseURL(baseURL))
+sseServer.ServeHTTP(w, r)
+```
+- `req.Params.Arguments` is `interface{}` — must type-assert to `map[string]interface{}` before indexing
+- Arrays in arguments: marshal raw value back to JSON, then unmarshal into typed slice
+- Run `go mod tidy` after adding — mcp-go has transitive deps (invopop/jsonschema, yosida95/uritemplate)
+
+**golangci-lint v2 config migration** — v2 requires `version: "2"` at top; `gofmt`/`goimports` move to `formatters:` section; `gosimple` merged into `staticcheck` and no longer exists as separate linter.
+
+**Context key type safety** — `staticcheck SA1029`: never use `string` as context key type. Define a package-private type:
+```go
+type contextKey string
+const UserIDContextKey contextKey = "userID"
+ctx = context.WithValue(ctx, UserIDContextKey, value)
+```
+All readers must also use the same typed constant, not a raw string.
+
 ## Common pitfalls
 
 **SwiftUI type-checker timeout** — "the compiler is unable to type-check this expression in reasonable time"

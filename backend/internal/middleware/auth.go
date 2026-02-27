@@ -9,6 +9,12 @@ import (
 	"github.com/avalarin/livlog/backend/internal/service"
 )
 
+// contextKey is an unexported type for context keys in this package.
+type contextKey string
+
+// UserIDContextKey is the context key for storing the authenticated user's ID.
+const UserIDContextKey contextKey = "userID"
+
 func AuthMiddleware(jwtService *service.JWTService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +42,7 @@ func AuthMiddleware(jwtService *service.JWTService) func(http.Handler) http.Hand
 			}
 
 			// Add user ID to context
-			ctx := context.WithValue(r.Context(), "userID", claims.UserID)
+			ctx := context.WithValue(r.Context(), UserIDContextKey, claims.UserID)
 
 			// Call next handler
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -45,7 +51,7 @@ func AuthMiddleware(jwtService *service.JWTService) func(http.Handler) http.Hand
 }
 
 func GetUserIDFromContext(ctx context.Context) string {
-	userID, ok := ctx.Value("userID").(string)
+	userID, ok := ctx.Value(UserIDContextKey).(string)
 	if !ok {
 		return ""
 	}
@@ -66,5 +72,5 @@ func respondUnauthorized(w http.ResponseWriter, message string) {
 		Message: message,
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }

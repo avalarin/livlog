@@ -73,7 +73,7 @@ func (h *AISearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 				},
 			}
 
-			json.NewEncoder(w).Encode(errorResp)
+			_ = json.NewEncoder(w).Encode(errorResp)
 			return
 		}
 

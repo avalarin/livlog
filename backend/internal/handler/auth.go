@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/avalarin/livlog/backend/internal/middleware"
 	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 )
@@ -216,7 +217,7 @@ func (h *AuthHandler) ResendVerificationCode(w http.ResponseWriter, r *http.Requ
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
 		respondWithError(w, http.StatusInternalServerError, "Failed to resend verification code", err)
@@ -305,7 +306,7 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 }
 
 func getUserIDFromContext(ctx context.Context) string {
-	userID, ok := ctx.Value("userID").(string)
+	userID, ok := ctx.Value(middleware.UserIDContextKey).(string)
 	if !ok {
 		return ""
 	}

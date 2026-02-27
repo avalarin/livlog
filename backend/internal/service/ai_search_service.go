@@ -249,7 +249,7 @@ Return ONLY valid JSON in this exact format, no markdown, no extra text:
 		)
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	s.logger.Info("OpenRouter API response received",
 		zap.Int("status_code", resp.StatusCode),

@@ -140,3 +140,18 @@
 
 - **[error-handling] Search error alert shown but no retry mechanism** — seen 1 time
   - Last seen: SearchView.swift:200-213 (performSearch catches errors and shows alert, but user must type again to retry; no inline retry button)
+
+- **[bug] MCP SSE server and MCP server instantiated fresh on every HTTP request** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:65-219 (NewMCPServer + NewSSEServer called inside handleMCP on every request; for an SSE long-lived connection this creates a new server object each time, and for the /message and /sse sub-routes each hit creates a completely separate server instance with no shared session state; the SSE handshake and the subsequent /message POST will hit different server objects and the session will never be found)
+
+- **[security] MCP unique_code bearer token has no rate limiting or brute-force protection** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:54-63 (GetUserIDByCode called on every request with no rate limiting; 64-char hex code is strong, but there is no lockout, no logging of failed attempts, and no IP-based throttle; any leaked code cannot be rotated without full Disable+Enable)
+
+- **[code-smell] URL scheme inference duplicated between config.PublicURL() and service.buildMCPURL()** — seen 1 time
+  - Last seen: config.go:85-90 + mcp_service.go:33-42 (identical port-presence heuristic to choose http vs https written twice; main.go passes cfg.Server.PublicHost to NewMCPService instead of calling cfg.Server.PublicURL(), so the config helper is dead for MCP; either pass the full URL from config or remove the helper)
+
+- **[bug] add-entries MCP tool does not declare entries parameter in tool schema** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:103-109 (mcp.NewTool("add-entries") only registers collection_id via mcp.WithString; the required entries array is never declared with mcp.WithArray or equivalent; AI clients that introspect the schema will not know entries is accepted and may omit it)
+
+- **[wrong-layer] MCPService holds raw publicHost string and re-implements URL construction** — seen 1 time
+  - Last seen: mcp_service.go:22-42 (service layer owns the http/https scheme logic that already lives in config.ServerConfig.PublicURL(); service should receive the fully-formed base URL, not a raw host string that it must interpret)

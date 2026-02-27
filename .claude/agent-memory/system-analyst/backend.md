@@ -77,11 +77,15 @@ was also changed from SET NULL to CASCADE in 008.
 ### entry_types
 ```
 id UUID PK, user_id UUID FK users (nullable — NULL means system/global type),
-name VARCHAR(50), icon VARCHAR(20), created_at, updated_at
+name VARCHAR(50), icon VARCHAR(20),
+fields JSONB DEFAULT '[]' (added in migration 009),
+created_at, updated_at
 ```
 System types (user_id IS NULL): Movie, Book, Game, Show, Music, Other.
 Users can create custom types (user_id = their ID).
-No per-type field schema — all types share the same additional_fields JSONB structure.
+Each type has `fields` JSONB: array of `{key, label, type}` (type is "string" or "number").
+System type fields: Movie=[Year,Genre], Book=[Year,Author], Game=[Year,Platform], Show=[Year,Genre], Music=[Year,Artist].
+Field values validated in EntryService.validateAdditionalFields() — number fields must be parseable floats.
 
 ### entry_images
 ```
@@ -105,8 +109,8 @@ id UUID PK (fixed known UUIDs), image_data BYTEA, created_at
 - Source: `file://migrations` directory
 - Files named: `NNN_description.up.sql` and `NNN_description.down.sql`
 - Auto-runs at startup in `main.go` via `repository.RunMigrations()`
-- Current highest: migration 008 (adds entry_types table and type_id to entries)
-- To add a migration: create `009_description.up.sql` + `.down.sql`
+- Current highest: migration 009 (adds `fields` JSONB column to entry_types with per-type field definitions)
+- To add a migration: create `010_description.up.sql` + `.down.sql`
 
 ## API Routes
 
@@ -168,9 +172,6 @@ id UUID PK (fixed known UUIDs), image_data BYTEA, created_at
 
 ## Default Collections (hardcoded in repository layer)
 Location: `collection_repository.go` `CreateDefaultCollections` method
-```go
-{"Movies", "🎬"}
-{"Books", "📚"}
-{"Games", "🎮"}
-```
+Creates a single default collection: `{"My List", "📋"}`.
+(Note: old Movies/Books/Games pattern was replaced in migration 008 — now a single "My List" collection is created per user.)
 These are user-scoped collections, not shared/global types.

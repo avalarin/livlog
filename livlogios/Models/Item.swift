@@ -380,6 +380,13 @@ struct ImageMeta: Codable, Identifiable {
     }
 }
 
+// MARK: - MCP Model
+
+struct MCPStatusResponse: Codable {
+    let enabled: Bool
+    let url: String?
+}
+
 // MARK: - Preview Data
 
 #if DEBUG

@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	ErrEntryNotFound      = errors.New("entry not found")
-	ErrSeedImageNotFound  = errors.New("seed image not found")
+	ErrEntryNotFound     = errors.New("entry not found")
+	ErrSeedImageNotFound = errors.New("seed image not found")
 )
 
 type Entry struct {
@@ -281,7 +281,7 @@ func (r *EntryRepository) SaveEntryImages(
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Delete existing images
 	deleteQuery := `DELETE FROM entry_images WHERE entry_id = $1`
@@ -552,7 +552,7 @@ func (r *EntryRepository) CopySeedImagesToEntry(ctx context.Context, entryID uui
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	for i, seedID := range seedImageIDs {
 		var data []byte

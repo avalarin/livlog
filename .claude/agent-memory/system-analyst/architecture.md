@@ -1,112 +1,148 @@
-# iOS App Architecture Notes
+# iOS App Architecture Notes (livlogios-ag1)
 
-## Navigation Structure
+## File Structure
 
-- Root: `livlogiosApp.swift` — switches between `LoginView` and `ContentView` based on `AppState.isAuthenticated`
-- `ContentView` owns a `NavigationStack` — the sole root navigation container for the authenticated experience
-- Navigation to `EntryDetailView` is via `NavigationLink(destination: EntryDetailView(entryID:))`
-- Sheets used for: `AddEntryView` (new/edit entry), `CollectionsView` (manage collections), `AISearchBottomSheet`, date/score pickers
-- No TabView anywhere — single-screen architecture with sheet-based flows
+```
+livlogios/
+  App/
+    livlogiosApp.swift          — @main entry, root auth gate
+  Config/
+    AppConfig.swift             — Environment enum (preview/dev/prod), base URL
+    AppState.swift              — ObservableObject: auth state only
+  Models/
+    Item.swift                  — CollectionModel, EntryModel, EntryTypeModel, ScoreRating, ImageMeta, FieldDefinition
+    User.swift                  — User, AuthResponse, AuthError, SendCodeResponse
+  Services/
+    BackendService.swift        — Core HTTP actor, token injection, error handling
+    AuthService.swift           — Apple + email sign-in, token refresh, keychain wrapper
+    CollectionService.swift     — CRUD: /collections
+    EntryService.swift          — CRUD: /entries, /entries/search, /images/:id
+    TypeService.swift           — GET /types
+    AISearchService.swift       — POST /search, image download
+    ConnectionMonitor.swift     — Periodic health checks, toast state
+    KeychainManager.swift       — Secure token storage
+  Views/
+    ContentView.swift           — Entry list (grid/list), multiselect, FAB, search trigger
+    CollectionsView.swift       — Collections list, add/edit/delete, AddEditCollectionView
+    AddEntryView.swift          — Create/edit entry, AI search sheet, score/date pickers
+    EntryDetailView.swift       — Entry detail, image gallery, edit/delete
+    SearchView.swift            — Full-screen entry search with debounce
+    ConnectionToastView.swift   — Toast view + ViewModifier + View extension
+    Auth/
+      LoginView.swift           — Email + Sign in with Apple
+      EmailVerificationView.swift — 6-digit code input, resend timer
+```
 
-## Data Models (`/livlogios/Models/Item.swift`)
+## Navigation Pattern
 
-- `CollectionModel`: id, name, icon (emoji string), createdAt, updatedAt — user-created folders
-- `EntryModel`: id, collectionID (String?, optional FK), title, description, score (ScoreRating enum), date, additionalFields ([String:String]), images ([ImageMeta])
-- `ScoreRating`: enum with rawValue Int (0=undecided, 1=bad, 2=okay, 3=great)
-- `ImageMeta`: id (UUID string), isCover, position
-- Entry types are NOT a separate enum or field — they are represented purely by which collection an entry belongs to
-- An entry with collectionID == nil is uncategorized (no type/folder)
+- Root in `livlogiosApp`: `if isCheckingAuth → ProgressView; else if isAuthenticated → CollectionsView; else → LoginView`
+- `CollectionsView` owns the root `NavigationStack` for authenticated flow
+- `CollectionsView → ContentView` via `NavigationLink` (push)
+- `ContentView → EntryDetailView` via `NavigationLink(destination:)` (push)
+- `ContentView` presents `AddEntryView` as `.sheet` (from FAB)
+- `ContentView` presents `SearchView` as `.fullScreenCover`
+- `EntryDetailView` presents `AddEntryView` as `.sheet` (edit mode)
+- `AddEntryView` presents `AISearchBottomSheet`, `DatePickerSheet`, `ScoreSelectionSheet` as `.sheet` with `presentationDetents`
+- `CollectionsView` presents `AddEditCollectionView` as `.sheet`
+- Auth flow: `LoginView → EmailVerificationView` via `NavigationLink` (push, using `navigationDestination(isPresented:)`)
+- NO TabView anywhere — single navigation stack with sheets
 
-## ContentView State & Logic
+## State Management
 
-- `@State private var items: [EntryModel]` — all entries loaded flat
-- `@State private var collections: [CollectionModel]` — all collections
-- `@State private var selectedCollection: CollectionModel?` — nil = "All" filter
-- `filteredItems` computed var filters by `selectedCollection?.id == entry.collectionID` then by search text
-- Both items and collections are loaded together via `loadData()` calling `CollectionService` and `EntryService` in parallel
-- `EntryService.getEntries()` loads ALL entries (limit 50, no collection filter used in practice)
-- `FilterBar` and `FilterPill` structs live in ContentView.swift
-- `FilterBar` only shows collections that have at least one entry (collectionsWithItems filter)
-- Grid/list layout controlled by `@AppStorage("viewMode")` enum `ViewMode`
-- The `+` FAB button and search bar are in `safeAreaInset(edge: .bottom)`
+- `AppState` (@MainActor, ObservableObject): only auth — `isAuthenticated`, `currentUser`, `isCheckingAuth`
+- Injected via `.environmentObject(appState)` at root; consumed in `LoginView` and `EmailVerificationView`
+- No global data state — each View holds its own `@State` for entries/collections/types
+- This means each screen independently fetches data on `.task`; no shared cache
+- `@AppStorage("viewMode")` persists grid/list preference across launches
+- `@Environment(\.dismiss)` used throughout for sheet dismissal
 
-## FilterBar (collection filter chips)
+## Networking Layer
 
-Defined inline in `ContentView.swift` (lines 372-455):
-- Renders "All" pill + one pill per collection that has entries
-- Selecting a pill sets `selectedCollection` binding
-- `FilterPill` shows icon (emoji), name, count badge
-- Uses `collectionsWithItems` computed property to hide empty collections
+- `BackendService` is a Swift `actor` singleton — thread-safe
+- HTTP client: raw `URLSession.shared.data(for:)` — no third-party networking library
+- Base URL: `AppConfig.baseURL` = `{backendBaseURL}/api/v1`
+  - Preview: `http://localhost:8080`
+  - Development: `http://192.168.1.42:8080`
+  - Production: `https://prod.livlog.avalarin.net`
+- Auth: Bearer token injected from `KeychainManager.shared.getAccessToken()` in `Authorization` header
+- Error handling: 401 → `AuthError.unauthorized`; 429 → `AuthError.rateLimitExceeded`; 4xx → `AuthError.serverError`
+- `CollectionService`, `EntryService`, `TypeService`, `AISearchService` are all `actor` singletons that call `BackendService.makeAuthenticatedRequest(...)`
+- Images: `GET /api/v1/images/{id}` returns raw binary data; inline base64 encoding on upload
+- No token auto-refresh on 401 mid-flow — only on app start in `AuthService.checkAuthStatus`
 
-## AddEntryView Flow
+## Data Models
 
-- Opened as `.sheet` from ContentView FAB or from EntryDetailView edit button
-- Takes optional `editingEntryID: String?` — nil = create, non-nil = edit
-- On load: fetches EntryTypeModel list from TypeService, selects matching type for edit mode
-- `typePickerSection`: horizontal scroll of `TypeButton` tiles — user picks entry type (Movie/Book/Game/etc.)
-- `textSection`: plain TextField for title + TextEditor for description/notes (notes = summaryLine + description from AI)
-- `imagesSection`: horizontal scroll of `ImageThumbnail` (up to 3 images)
-- Score picker via bottom sheet (`ScoreSelectionSheet`), date picker via bottom sheet (`DatePickerSheet`)
-- Save calls `EntryService.createEntry` or `EntryService.updateEntry`; disabled if `title.isEmpty`
-- AI search via `AISearchBottomSheet` sheet — calls backend `/search` endpoint
-- Only validation: Save button `.disabled(title.isEmpty || isSaving)` — no other validation
+### CollectionModel
+- `id: String`, `name: String`, `icon: String` (emoji), `entryCount: Int`, `createdAt/updatedAt: Date`
+- ISO8601 date decoding (with/without fractional seconds)
 
-## AddEntryView State Variables
+### EntryTypeModel
+- `id: String`, `name: String`, `icon: String` (emoji), `fields: [FieldDefinition]`
+- `FieldDefinition`: `key: String`, `label: String`, `type: String` ("string" | "number")
+- Types are server-managed, fetched from `GET /api/v1/types` (not hardcoded)
+- Preview types: Movie, Book, Game, Show, Music, Other
 
-- `@State private var types: [EntryTypeModel]` — loaded from TypeService on appear
-- `@State private var selectedType: EntryTypeModel?` — nil until user or AI picks a type
-- `@State private var title: String` — plain text, required (save disabled if empty)
-- `@State private var entryDescription: String` — multiline notes/description
-- `@State private var score: ScoreRating = .undecided` — modified via ScoreSelectionSheet
-- `@State private var date: Date = Date()` — modified via DatePickerSheet
-- `@State private var selectedImages: [UIImage]` — up to 3 images; first = cover
-- `@FocusState private var focus: FocusedField?` — controls keyboard toolbar vs bottom bar
-- Boolean flags: `showAISearchSheet`, `showDatePicker`, `showScoreSheet`, `isLoading`, `isSaving`, `showError`
+### EntryModel
+- `id: String`, `collectionID: String?`, `typeID: String?`, `title: String`, `description: String`
+- `score: ScoreRating` (0=undecided, 1=bad, 2=okay, 3=great)
+- `date: Date` — encoded as `yyyy-MM-dd` string
+- `additionalFields: [String: String]` — flexible key-value metadata per type
+- `images: [ImageMeta]` — ordered list with cover flag
+- `createdAt/updatedAt: Date` — ISO8601
 
-## EntryDetailView Layout Patterns
+### ScoreRating
+- Int enum: `.undecided=0`, `.bad=1`, `.okay=2`, `.great=3`
+- Has `.emoji` and `.label` display properties
 
-- 2-column grid for `additionalFields` using `LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12)`
-- Each cell: VStack with caption label + subheadline value, padded with `Color(.systemGray6)` background, `cornerRadius: 10`
-- `metadataItems` sorted by fixed key order: Year, Genre, Author, Platform
-- Full-width image gallery via `TabView` with `.page` style; gradient placeholder if no images
+### User
+- `id: UUID`, `email: String?`, `displayName: String?`, `emailVerified: Bool`
+- `authProviders: [String]`, `createdAt: Date`, `updatedAt: Date?`
 
-## AISearchService.EntryOption Fields
+## Existing Screens
 
-- `id: String`, `title: String`, `entryType: String` (free string: "movie","book","game","show","tv","music")
-- `year: String?`, `genre: String?`, `author: String?`, `platform: String?` (optional metadata)
-- `summaryLine: String` (brief tagline), `description: String` (longer text)
-- `imageUrls: [String]` (direct image URLs), `downloadedImages: [Data]` (populated after download)
-- `additionalFields: [String:String]` computed property aggregates non-nil optional fields
-- Type icon via `suggestedIcon` computed property (switch on `entryType.lowercased()`)
+1. `LoginView` — Email + Apple Sign In; no settings/profile
+2. `EmailVerificationView` — 6-digit OTP with resend timer (60s)
+3. `CollectionsView` — Root post-auth screen; collection list + create/edit/delete
+4. `ContentView` — Entry list in grid or list mode; multiselect; bulk delete; fill/clear test data
+5. `EntryDetailView` — Full detail view; image gallery (TabView paged); edit + delete
+6. `AddEntryView` — Create/edit entry with type picker, AI search, photo picker, score/date sheets
+7. `SearchView` — Full-screen search with debounce (300ms), results in list
 
-## applyOptionToEntry Mapping
+NO settings screen, NO profile screen, NO account management screen currently exists.
 
-In AddEntryView, `applyOptionToEntry(_ option: EntryOption)` maps AI result to form:
-- `title` = option.title (direct)
-- `entryDescription` = option.summaryLine + "\n" + option.description (concatenated)
-- `selectedType` matched by name from loaded types array (case-insensitive switch on option.entryType)
-- Images downloaded async via `AISearchService.downloadImages(for:)`, then `selectedImages` updated on MainActor
-- Note: `additionalFields` (Year, Genre, etc.) from EntryOption are NOT applied to the form — they are only displayed in search result cards
+## Toast / Alert UI Patterns
 
-## CollectionsView
+### Toast
+- `ConnectionToastView`: custom `View` struct (not a system toast)
+- Applied via `ConnectionToastModifier: ViewModifier` using `.overlay(alignment: .bottom)`
+- Exposed as `.connectionToast(monitor:)` View extension
+- Shows for offline (`isToastSuccess=false`, stays until reconnected) and reconnection (`isToastSuccess=true`, auto-dismisses after 3s)
+- `ConnectionMonitor` drives state via `@Published` properties observed via `@ObservedObject`
 
-- Accessed via toolbar menu ("Manage Collections") in ContentView
-- Shows a List of all collections with entry counts
-- Supports add (sheet: `AddEditCollectionView(mode: .add)`), edit (sheet: `AddEditCollectionView(mode: .edit(collection))`), delete (with alert)
-- Delete also deletes all entries in the collection (backend enforces this per alert message)
-- Empty state shows "Create Default Collections" button which calls `/collections/default`
-- On dismiss: ContentView calls `loadData()` to refresh
+### Alerts
+- All error alerts use the system `.alert("Error", isPresented: $showingError)` pattern
+- Every screen that fetches data has its own `@State var errorMessage: String?` + `@State var showingError: Bool`
+- Destructive actions (delete) use `.alert` with role `.destructive` Button
+- No custom alert styling — pure SwiftUI `.alert` throughout
 
-## Services
+### Copy-to-clipboard
+- No copy-to-clipboard functionality exists anywhere in the codebase currently
 
-- All services are `actor` singletons (thread-safe, `static let shared`)
-- `CollectionService`: CRUD on `/collections`, `/collections/default`, `/collections/:id`
-- `EntryService`: CRUD on `/entries`, `/entries/:id`, `/entries/search`, `/images/:id`
-- `BackendService`: core HTTP layer, handles auth token injection from Keychain, error handling (401, 429, 4xx)
-- `AISearchService`: calls `/search` POST, downloads images from URLs
+## Services Summary
 
-## AppState
+| Service | Type | Endpoints |
+|---|---|---|
+| `BackendService` | actor | Health, Auth, Token refresh |
+| `AuthService` | @MainActor ObservableObject | Apple/email sign-in, logout, deleteAccount |
+| `CollectionService` | actor | GET/POST/PUT/DELETE /collections |
+| `EntryService` | actor | GET/POST/PUT/DELETE /entries, GET /images/:id |
+| `TypeService` | actor | GET /types |
+| `AISearchService` | actor | POST /search, image download from URLs |
+| `ConnectionMonitor` | @MainActor ObservableObject | Periodic health check every 10s |
+| `KeychainManager` | class singleton | access_token, refresh_token in Keychain |
 
-- Only manages authentication state: `isAuthenticated`, `currentUser`, `isCheckingAuth`
-- Does NOT hold collections or entries — those are local to each View's `@State`
-- This means every sheet/screen must reload data independently
+## AppState — Auth Flow
+
+- Checks token on launch via `AuthService.checkAuthStatus()` (calls GET /auth/me; falls back to token refresh)
+- `logout()` and `deleteAccount()` both clear Keychain and set `isAuthenticated = false`
+- The `authService` property on `AppState` is accessed directly by `LoginView` and `EmailVerificationView` via `@EnvironmentObject`

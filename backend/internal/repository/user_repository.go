@@ -332,7 +332,7 @@ func (r *UserRepository) CreateUserWithProvider(
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Create user
 	userQuery := `

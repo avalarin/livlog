@@ -56,7 +56,7 @@ func (r *VerificationCodeRepository) CreateVerificationCode(
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Invalidate all previous unused codes for this email
 	invalidateQuery := `

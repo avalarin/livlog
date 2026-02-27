@@ -69,6 +69,7 @@ func main() {
 	entryRepo := repository.NewEntryRepository(db.Pool)
 	typeRepo := repository.NewTypeRepository(db.Pool)
 	aiSearchUsageRepo := repository.NewAISearchUsageRepository(db.Pool)
+	mcpRepo := repository.NewMCPRepository(db.Pool)
 
 	// Seed cover images with fixed UUIDs
 	log.Info("seeding cover images")
@@ -103,6 +104,9 @@ func main() {
 	entryService := service.NewEntryService(entryRepo, collectionRepo, typeRepo)
 	typeService := service.NewTypeService(typeRepo)
 
+	// Initialize MCP service
+	mcpService := service.NewMCPService(mcpRepo, cfg.Server.PublicURL())
+
 	// Initialize AI search service
 	aiSearchService, err := service.NewAISearchService(cfg, aiSearchUsageRepo, userRepo, log)
 	if err != nil {
@@ -116,6 +120,8 @@ func main() {
 	entryHandler := handler.NewEntryHandler(entryService)
 	typeHandler := handler.NewTypeHandler(typeService)
 	aiSearchHandler := handler.NewAISearchHandler(aiSearchService)
+	mcpHandler := handler.NewMCPHandler(mcpService)
+	mcpProtocolHandler := handler.NewMCPProtocolHandler(mcpService, collectionService, entryService, log)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -129,6 +135,9 @@ func main() {
 
 	// Metrics endpoint (no /api/v1 prefix)
 	r.Handle("/metrics", promhttp.Handler())
+
+	// MCP protocol endpoint (no /api/v1 prefix, auth via unique_code)
+	mcpProtocolHandler.RegisterRoutes(r)
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -156,6 +165,9 @@ func main() {
 
 			// AI search endpoint
 			aiSearchHandler.RegisterRoutes(r)
+
+			// MCP management endpoint
+			mcpHandler.RegisterRoutes(r)
 		})
 	})
 

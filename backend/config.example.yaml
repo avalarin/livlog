@@ -6,6 +6,9 @@
 server:
   host: "0.0.0.0"
   port: 8080
+  # Public host used to construct MCP endpoint URLs.
+  # Include port for local dev (uses http), omit port for production (uses https).
+  public_host: "localhost:8080"
 
 database:
   host: "localhost"

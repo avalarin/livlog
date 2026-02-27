@@ -20,21 +20,21 @@ const (
 )
 
 var (
-	ErrInvalidEmail          = errors.New("invalid email format")
-	ErrInvalidCode           = errors.New("invalid verification code")
-	ErrCodeExpired           = errors.New("verification code expired")
-	ErrCodeAlreadyUsed       = errors.New("verification code already used")
-	ErrRateLimitExceeded     = errors.New("too many requests, please wait")
+	ErrInvalidEmail      = errors.New("invalid email format")
+	ErrInvalidCode       = errors.New("invalid verification code")
+	ErrCodeExpired       = errors.New("verification code expired")
+	ErrCodeAlreadyUsed   = errors.New("verification code already used")
+	ErrRateLimitExceeded = errors.New("too many requests, please wait")
 
 	// Simple email regex for basic validation
 	emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 )
 
 type EmailAuthService struct {
-	userRepo     *repository.UserRepository
-	codeRepo     *repository.VerificationCodeRepository
-	jwtService   *JWTService
-	rateLimiter  *RateLimiter
+	userRepo    *repository.UserRepository
+	codeRepo    *repository.VerificationCodeRepository
+	jwtService  *JWTService
+	rateLimiter *RateLimiter
 }
 
 func NewEmailAuthService(
@@ -182,10 +182,10 @@ func (s *EmailAuthService) findOrCreateEmailUser(ctx context.Context, email stri
 			user, err = s.userRepo.CreateUserWithProvider(
 				ctx,
 				email,
-				"",           // No display name initially
-				true,         // Email verified after successful code verification
-				"email",      // Provider type
-				email,        // Provider user ID is the email itself
+				"",      // No display name initially
+				true,    // Email verified after successful code verification
+				"email", // Provider type
+				email,   // Provider user ID is the email itself
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create user: %w", err)
