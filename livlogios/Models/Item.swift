@@ -44,6 +44,7 @@ struct CollectionModel: Codable, Identifiable {
     let entryCount: Int
     let memberCount: Int
     let myRole: CollectionRole
+    let sharedBy: String?
     let createdAt: Date
     let updatedAt: Date
 
@@ -54,6 +55,7 @@ struct CollectionModel: Codable, Identifiable {
         case entryCount = "entry_count"
         case memberCount = "member_count"
         case myRole = "my_role"
+        case sharedBy = "shared_by"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -65,6 +67,7 @@ struct CollectionModel: Codable, Identifiable {
         entryCount: Int = 0,
         memberCount: Int = 1,
         myRole: CollectionRole = .owner,
+        sharedBy: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -74,6 +77,7 @@ struct CollectionModel: Codable, Identifiable {
         self.entryCount = entryCount
         self.memberCount = memberCount
         self.myRole = myRole
+        self.sharedBy = sharedBy
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -87,6 +91,7 @@ struct CollectionModel: Codable, Identifiable {
         entryCount = try container.decodeIfPresent(Int.self, forKey: .entryCount) ?? 0
         memberCount = try container.decodeIfPresent(Int.self, forKey: .memberCount) ?? 1
         myRole = try container.decodeIfPresent(CollectionRole.self, forKey: .myRole) ?? .read
+        sharedBy = try container.decodeIfPresent(String.self, forKey: .sharedBy)
 
         // Decode ISO8601 timestamps
         let iso8601Formatter = ISO8601DateFormatter()
@@ -132,6 +137,7 @@ struct CollectionModel: Codable, Identifiable {
         try container.encode(entryCount, forKey: .entryCount)
         try container.encode(memberCount, forKey: .memberCount)
         try container.encode(myRole, forKey: .myRole)
+        try container.encodeIfPresent(sharedBy, forKey: .sharedBy)
 
         // Encode timestamps as ISO8601
         let iso8601Formatter = ISO8601DateFormatter()

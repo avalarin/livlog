@@ -26,6 +26,7 @@ type Collection struct {
 	EntryCount  int       `json:"entry_count"`
 	MemberCount int       `json:"member_count"`
 	MyRole      string    `json:"my_role"`
+	SharedBy    *string   `json:"shared_by,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -98,6 +99,8 @@ func (r *CollectionRepository) CreateCollection(
 }
 
 // GetCollectionsByUserID retrieves all collections accessible by the user via collection_shares.
+// The shared_by field is populated with the inviter's display name (falling back to email)
+// when the current user is not the collection creator.
 func (r *CollectionRepository) GetCollectionsByUserID(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -105,12 +108,14 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 	query := `
 		SELECT c.id, c.user_id, c.name, c.icon, COUNT(DISTINCT e.id) AS entry_count,
 		       (SELECT COUNT(*) FROM collection_shares cs2 WHERE cs2.collection_id = c.id) AS member_count,
-		       cs.permission_level AS my_role, c.created_at, c.updated_at
+		       cs.permission_level AS my_role, c.created_at, c.updated_at,
+		       CASE WHEN c.user_id = $1 THEN NULL
+		            ELSE (SELECT COALESCE(u.display_name, u.email) FROM users u WHERE u.id = cs.owner_id)
+		       END AS shared_by
 		FROM collections c
-		JOIN collection_shares cs ON cs.collection_id = c.id
+		JOIN collection_shares cs ON cs.collection_id = c.id AND cs.shared_with_user_id = $1
 		LEFT JOIN entries e ON e.collection_id = c.id
-		WHERE cs.shared_with_user_id = $1
-		GROUP BY c.id, cs.permission_level
+		GROUP BY c.id, cs.permission_level, cs.owner_id
 		ORDER BY c.created_at ASC
 	`
 
@@ -133,6 +138,7 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 			&collection.MyRole,
 			&collection.CreatedAt,
 			&collection.UpdatedAt,
+			&collection.SharedBy,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan collection: %w", err)
@@ -214,7 +220,7 @@ func (r *CollectionRepository) GetCollectionMembers(
 	collectionID uuid.UUID,
 ) ([]*CollectionMember, error) {
 	query := `
-		SELECT cs.shared_with_user_id, u.email, u.display_name,
+		SELECT cs.shared_with_user_id, u.email, COALESCE(u.display_name, u.email) AS display_name,
 		       cs.permission_level, cs.owner_id, cs.created_at
 		FROM collection_shares cs
 		JOIN users u ON u.id = cs.shared_with_user_id

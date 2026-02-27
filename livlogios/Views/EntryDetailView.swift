@@ -210,6 +210,8 @@ struct EntryDetailView: View {
                             collection: CollectionModel(id: collectionID, name: "", icon: "📝"),
                             editingEntryID: entryID
                         )
+                    } else {
+                        Color.clear.onAppear { showingEditSheet = false }
                     }
                 }
                 .alert("Delete Entry", isPresented: $showingDeleteAlert) {

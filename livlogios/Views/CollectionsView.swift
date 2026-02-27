@@ -46,6 +46,9 @@ struct CollectionsView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    .refreshable {
+                        await loadData()
+                    }
                 }
             }
             .navigationTitle("My Collections")
@@ -208,9 +211,23 @@ struct CollectionRow: View {
                 Text(collection.name)
                     .font(.headline)
 
-                Text("\(entryCount) entries")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("\(entryCount) \(entryCount == 1 ? "entry" : "entries")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if collection.myRole == .read {
+                        Text("· Read Only")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let sharedBy = collection.sharedBy {
+                    Text("Shared by \(sharedBy)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             Spacer()
@@ -490,8 +507,8 @@ struct AddEditCollectionView: View {
                             .foregroundStyle(roleBadgeColor(member.role))
                             .clipShape(Capsule())
 
-                        let currentUserID = appState.currentUser?.id.uuidString
-                        if member.userId != currentUserID {
+                        let currentUserID = appState.currentUser?.id.uuidString.lowercased()
+                        if member.userId.lowercased() != currentUserID {
                             Button {
                                 memberToRemove = member
                                 showingRemoveMemberAlert = true
@@ -556,6 +573,7 @@ struct AddEditCollectionView: View {
             case .edit(let collection):
                 _ = try await CollectionService.shared.updateCollection(id: collection.id, name: name, icon: selectedIcon)
             }
+            isSaving = false
             dismiss()
         } catch {
             errorMessage = "Failed to save collection: \(error.localizedDescription)"
@@ -585,10 +603,12 @@ struct ShareCollectionSheet: View {
         NavigationStack {
             Form {
                 Section("Email Address") {
-                    TextField("colleague@example.com", text: $email)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
+                    TextField(text: $email, prompt: Text("colleague@example.com").foregroundStyle(Color(.placeholderText))) {
+                        EmptyView()
+                    }
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .autocapitalization(.none)
                 }
 
                 Section("Permission") {
@@ -616,12 +636,15 @@ struct ShareCollectionSheet: View {
                         }
                     }
                     .disabled(!isEmailValid || isSharing)
-
-                    Button("Cancel", role: .cancel) { dismiss() }
                 }
             }
             .navigationTitle("Share Collection")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
             .alert("Shared!", isPresented: $showSuccess) {
                 Button("OK") {
                     onDone?()

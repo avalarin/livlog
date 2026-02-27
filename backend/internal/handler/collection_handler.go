@@ -39,14 +39,15 @@ type createCollectionRequest struct {
 }
 
 type collectionResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Icon        string `json:"icon"`
-	EntryCount  int    `json:"entry_count"`
-	MemberCount int    `json:"member_count"`
-	MyRole      string `json:"my_role"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Icon        string  `json:"icon"`
+	EntryCount  int     `json:"entry_count"`
+	MemberCount int     `json:"member_count"`
+	MyRole      string  `json:"my_role"`
+	SharedBy    *string `json:"shared_by,omitempty"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
 }
 
 type memberResponse struct {
@@ -424,6 +425,7 @@ func mapCollectionToResponse(c *repository.Collection) collectionResponse {
 		EntryCount:  c.EntryCount,
 		MemberCount: c.MemberCount,
 		MyRole:      c.MyRole,
+		SharedBy:    c.SharedBy,
 		CreatedAt:   c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   c.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}

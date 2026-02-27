@@ -217,3 +217,15 @@
 
 - **[bug] GetUserRole returns ErrCollectionNotFound for non-member — misleading sentinel reuse** — seen 1 time
   - Last seen: collection_repository.go:202-204 — when a user has no row in collection_shares, GetUserRole returns ErrCollectionNotFound; callers in entry_service.go treat that as "collection doesn't exist" and surface HTTP 404/403 correctly, but the semantic is "not a member", not "not found"; DeleteEntry wraps it as "invalid collection: %w" which the handler maps to 403, masking the real reason
+
+- **[bug] GetCollectionsByUserID GROUP BY duplicates rows for user who is both creator and sharee from two different inviters** — seen 1 time
+  - Last seen: collection_repository.go:119-120 — GROUP BY includes cs.owner_id, u_inviter.display_name, u_inviter.email; a user can appear in collection_shares twice (owner self-row + re-added by another owner), producing two rows for the same collection in the list
+
+- **[bug] Edit sheet blank when entry.collectionID is nil — existing recurring issue not fixed** — seen 3 times
+  - Last seen: EntryDetailView.swift:208-213 — sheet body is empty when entry.collectionID is nil; user taps edit and sees a blank sheet
+
+- **[wrong-layer] Placeholder CollectionModel with fake data constructed in view layer** — seen 3 times
+  - Last seen: EntryDetailView.swift:210 — CollectionModel(id: collectionID, name: "", icon: "📝") passed to AddEntryView
+
+- **[code-smell] Magic string role values** — seen 4 times
+  - Last seen: collection_service.go:91, 153, 185 + collection_handler.go:342 — inline string literals "owner", "write", "read" still scattered with no named constants
