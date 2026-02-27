@@ -67,6 +67,7 @@ func main() {
 	codeRepo := repository.NewVerificationCodeRepository(db.Pool)
 	collectionRepo := repository.NewCollectionRepository(db.Pool)
 	entryRepo := repository.NewEntryRepository(db.Pool)
+	typeRepo := repository.NewTypeRepository(db.Pool)
 	aiSearchUsageRepo := repository.NewAISearchUsageRepository(db.Pool)
 
 	// Seed cover images with fixed UUIDs
@@ -97,9 +98,10 @@ func main() {
 	// Initialize email auth service
 	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, jwtService, rateLimiter)
 
-	// Initialize collection and entry services
+	// Initialize collection, entry, and type services
 	collectionService := service.NewCollectionService(collectionRepo)
 	entryService := service.NewEntryService(entryRepo, collectionRepo)
+	typeService := service.NewTypeService(typeRepo)
 
 	// Initialize AI search service
 	aiSearchService, err := service.NewAISearchService(cfg, aiSearchUsageRepo, userRepo, log)
@@ -112,6 +114,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService, emailAuthService)
 	collectionHandler := handler.NewCollectionHandler(collectionService)
 	entryHandler := handler.NewEntryHandler(entryService)
+	typeHandler := handler.NewTypeHandler(typeService)
 	aiSearchHandler := handler.NewAISearchHandler(aiSearchService)
 
 	// Setup router
@@ -146,9 +149,10 @@ func main() {
 			r.Post("/auth/logout", authHandler.Logout)
 			r.Delete("/auth/account", authHandler.DeleteAccount)
 
-			// Collections and entries endpoints
+			// Collections, entries, and types endpoints
 			collectionHandler.RegisterRoutes(r)
 			entryHandler.RegisterRoutes(r)
+			typeHandler.RegisterRoutes(r)
 
 			// AI search endpoint
 			aiSearchHandler.RegisterRoutes(r)

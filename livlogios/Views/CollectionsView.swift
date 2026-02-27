@@ -8,10 +8,7 @@
 import SwiftUI
 
 struct CollectionsView: View {
-    @Environment(\.dismiss) private var dismiss
-
     @State private var collections: [CollectionModel] = []
-    @State private var entries: [EntryModel] = []
     @State private var showingAddCollection = false
     @State private var editingCollection: CollectionModel?
     @State private var showingDeleteAlert = false
@@ -21,7 +18,7 @@ struct CollectionsView: View {
     @State private var isCreatingDefaults = false
     @State private var errorMessage: String?
     @State private var showError = false
-    
+
     var body: some View {
         NavigationStack {
             Group {
@@ -30,29 +27,27 @@ struct CollectionsView: View {
                 } else {
                     List {
                         ForEach(collections) { collection in
-                            let entryCount = entries.filter { $0.collectionID == collection.id }.count
-                            CollectionRow(
-                                collection: collection,
-                                entryCount: entryCount,
-                                onEdit: { editingCollection = collection },
-                                onDelete: {
-                                    collectionToDelete = collection
-                                    showingDeleteAlert = true
-                                }
-                            )
+                            NavigationLink {
+                                ContentView(collection: collection)
+                            } label: {
+                                CollectionRow(
+                                    collection: collection,
+                                    entryCount: collection.entryCount,
+                                    onEdit: { editingCollection = collection },
+                                    onDelete: {
+                                        collectionToDelete = collection
+                                        showingDeleteAlert = true
+                                    }
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
             }
-            .navigationTitle("Collections")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("My Collections")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-                
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingAddCollection = true
@@ -90,8 +85,7 @@ struct CollectionsView: View {
                 }
             } message: {
                 if let collection = collectionToDelete {
-                    let entryCount = entries.filter { $0.collectionID == collection.id }.count
-                    Text("Delete \"\(collection.name)\" and all its \(entryCount) entries? This cannot be undone.")
+                    Text("Delete \"\(collection.name)\" and all its \(collection.entryCount) entries? This cannot be undone.")
                 }
             }
             .overlay {
@@ -101,25 +95,19 @@ struct CollectionsView: View {
                     } description: {
                         Text("Create a collection to organize your entries")
                     } actions: {
-                        VStack(spacing: 12) {
-                            Button {
-                                Task {
-                                    await createDefaultCollections()
-                                }
-                            } label: {
-                                if isCreatingDefaults {
-                                    ProgressView()
-                                } else {
-                                    Text("Create Default Collections")
-                                }
+                        Button {
+                            Task {
+                                await createDefaultCollections()
                             }
-                            .disabled(isCreatingDefaults)
-                            .buttonStyle(.borderedProminent)
-
-                            Button("Add Custom Collection") {
-                                showingAddCollection = true
+                        } label: {
+                            if isCreatingDefaults {
+                                ProgressView()
+                            } else {
+                                Text("Create My List")
                             }
                         }
+                        .disabled(isCreatingDefaults)
+                        .buttonStyle(.borderedProminent)
                     }
                 }
             }
@@ -140,19 +128,12 @@ struct CollectionsView: View {
 
     private func loadData() async {
         isLoading = true
-        errorMessage = nil
-
         do {
-            async let collectionsTask = CollectionService.shared.getCollections()
-            async let entriesTask = EntryService.shared.getEntries()
-
-            collections = try await collectionsTask
-            entries = try await entriesTask
+            collections = try await CollectionService.shared.getCollections()
         } catch {
-            errorMessage = "Failed to load data: \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
             showError = true
         }
-
         isLoading = false
     }
 
@@ -247,29 +228,29 @@ struct AddEditCollectionView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showError = false
-    
+
     private let emojiOptions = [
         "📁", "🎬", "📚", "🎮", "🎵", "🎨", "🍿", "📺", "🎭", "🎪",
         "✈️", "🌍", "🍽️", "☕️", "🏋️", "⚽️", "🎾", "🎯", "🎲", "🎸",
         "📷", "💼", "🎓", "💡", "🔧", "🛠️", "🎁", "💎", "🌟", "✨"
     ]
-    
+
     private var isEditing: Bool {
         if case .edit = mode { return true }
         return false
     }
-    
+
     private var title: String {
         isEditing ? "Edit Collection" : "New Collection"
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Name") {
                     TextField("Collection name", text: $name)
                 }
-                
+
                 Section("Icon") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
                         ForEach(emojiOptions, id: \.self) { emoji in
@@ -293,14 +274,14 @@ struct AddEditCollectionView: View {
                     }
                     .padding(.vertical, 8)
                 }
-                
+
                 Section {
                     HStack {
                         Text("Preview")
                             .foregroundStyle(.secondary)
-                        
+
                         Spacer()
-                        
+
                         HStack(spacing: 8) {
                             Text(selectedIcon)
                                 .font(.title3)
@@ -318,7 +299,7 @@ struct AddEditCollectionView: View {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         Task {

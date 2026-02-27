@@ -17,22 +17,21 @@ struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
+    let collection: CollectionModel
     private let isPreview: Bool
 
-    init(previewItems: [EntryModel] = [], previewCollections: [CollectionModel] = []) {
+    init(collection: CollectionModel, previewItems: [EntryModel] = []) {
+        self.collection = collection
         self.isPreview = !previewItems.isEmpty
         _items = State(initialValue: previewItems)
-        _collections = State(initialValue: previewCollections)
     }
 
     @State private var showingAddEntry = false
-    @State private var showingCollections = false
-    @State private var selectedCollection: CollectionModel?
     @State private var searchText = ""
     @State private var showingDebugMenu = false
 
     @State private var items: [EntryModel]
-    @State private var collections: [CollectionModel]
+    @State private var types: [EntryTypeModel] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingError = false
@@ -50,38 +49,28 @@ struct ContentView: View {
     }
 
     var filteredItems: [EntryModel] {
-        var result = items
-
-        if let collection = selectedCollection {
-            result = result.filter { $0.collectionID == collection.id }
+        guard !searchText.isEmpty else { return items }
+        return items.filter {
+            $0.title.localizedCaseInsensitiveContains(searchText) ||
+            $0.description.localizedCaseInsensitiveContains(searchText)
         }
-
-        if !searchText.isEmpty {
-            result = result.filter {
-                $0.title.localizedCaseInsensitiveContains(searchText) ||
-                $0.description.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-
-        return result
     }
 
     func loadData() async {
         isLoading = true
         errorMessage = nil
+        defer { isLoading = false }
 
         do {
-            async let collectionsTask = CollectionService.shared.getCollections()
-            async let entriesTask = EntryService.shared.getEntries()
-
-            collections = try await collectionsTask
+            async let entriesTask = EntryService.shared.getEntries(collectionID: collection.id)
+            async let typesTask = TypeService.shared.getTypes()
             items = try await entriesTask
+            types = try await typesTask
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "Failed to load data: \(error.localizedDescription)"
             showingError = true
         }
-
-        isLoading = false
     }
 
     func deleteEntry(_ entry: EntryModel) async {
@@ -95,247 +84,217 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(.systemBackground),
-                        Color(.systemGray6).opacity(0.5)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                if items.isEmpty {
-                    EmptyStateView(showingAddEntry: $showingAddEntry)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            FilterBar(
-                                selectedCollection: $selectedCollection,
-                                collections: collections,
-                                items: items
-                            )
-                            .padding(.bottom, 16)
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(.systemBackground),
+                    Color(.systemGray6).opacity(0.5)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                            if filteredItems.isEmpty {
-                                VStack(spacing: 12) {
-                                    Text("No matches")
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                    Text("Try adjusting your filters")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 60)
-                            } else {
-                                if viewMode == .grid {
-                                    LazyVGrid(columns: gridColumns, spacing: 12) {
-                                        ForEach(filteredItems) { item in
-                                            let collection = collections.first { $0.id == item.collectionID }
-                                            NavigationLink(destination: EntryDetailView(entryID: item.id)) {
-                                                EntryCard(
-                                                    item: item,
-                                                    collection: collection,
-                                                    onDelete: {
-                                                        await deleteEntry(item)
-                                                    }
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                    .padding(.horizontal)
-                                } else {
-                                    LazyVStack(spacing: 8) {
-                                        ForEach(filteredItems) { item in
-                                            let collection = collections.first { $0.id == item.collectionID }
-                                            NavigationLink(destination: EntryDetailView(entryID: item.id)) {
-                                                EntryListRow(
-                                                    item: item,
-                                                    collection: collection,
-                                                    onDelete: {
-                                                        await deleteEntry(item)
-                                                    }
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                    .padding(.horizontal)
-                                }
-                            }
-                        }
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.width
-                        } action: { width in
-                            containerWidth = width
-                        }
-                    }
-                    .safeAreaInset(edge: .bottom) {
-                        HStack(spacing: 12) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "magnifyingglass")
+            if items.isEmpty && !isLoading {
+                EmptyStateView(showingAddEntry: $showingAddEntry)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if filteredItems.isEmpty && !searchText.isEmpty {
+                            VStack(spacing: 12) {
+                                Text("No matches")
+                                    .font(.headline)
                                     .foregroundStyle(.secondary)
+                                Text("Try adjusting your search")
                                     .font(.subheadline)
-                                TextField("Search entries...", text: $searchText)
-                                    .textFieldStyle(.automatic)
-                                if !searchText.isEmpty {
-                                    Button {
-                                        searchText = ""
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.secondary)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
+                        } else {
+                            if viewMode == .grid {
+                                LazyVGrid(columns: gridColumns, spacing: 12) {
+                                    ForEach(filteredItems) { item in
+                                        let entryType = types.first { $0.id == item.typeID }
+                                        NavigationLink(destination: EntryDetailView(entryID: item.id)) {
+                                            EntryCard(
+                                                item: item,
+                                                entryType: entryType,
+                                                onDelete: {
+                                                    await deleteEntry(item)
+                                                }
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-
-                            Button {
-                                showingAddEntry = true
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 48, height: 48)
-                                    .background(Color.accentColor)
-                                    .clipShape(Circle())
-                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                                .padding(.horizontal)
+                            } else {
+                                LazyVStack(spacing: 8) {
+                                    ForEach(filteredItems) { item in
+                                        let entryType = types.first { $0.id == item.typeID }
+                                        NavigationLink(destination: EntryDetailView(entryID: item.id)) {
+                                            EntryListRow(
+                                                item: item,
+                                                entryType: entryType,
+                                                onDelete: {
+                                                    await deleteEntry(item)
+                                                }
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal)
                             }
                         }
-                        .padding(.horizontal, 16)
+                    }
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.width
+                    } action: { width in
+                        containerWidth = width
+                    }
+                }
+                .safeAreaInset(edge: .bottom) {
+                    HStack(spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                                .font(.subheadline)
+                            TextField("Search entries...", text: $searchText)
+                                .textFieldStyle(.automatic)
+                            if !searchText.isEmpty {
+                                Button {
+                                    searchText = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 12)
                         .padding(.vertical, 10)
-                    }
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button {
-                            withAnimation(.spring(response: 0.3)) {
-                                viewMode = viewMode == .grid ? .list : .grid
-                            }
-                        } label: {
-                            Label(
-                                viewMode == .grid ? "Switch to List" : "Switch to Grid",
-                                systemImage: viewMode == .grid ? "list.bullet" : "square.grid.2x2"
-                            )
-                        }
-
-                        Divider()
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
                         Button {
-                            showingCollections = true
+                            showingAddEntry = true
                         } label: {
-                            Label("Manage Collections", systemImage: "folder")
-                        }
-
-                        Divider()
-
-                        Button {
-                            Task {
-                                await fillWithTestData()
-                            }
-                        } label: {
-                            Label("Fill with Test Data", systemImage: "doc.badge.plus")
-                        }
-
-                        Button(role: .destructive) {
-                            showingDebugMenu = true
-                        } label: {
-                            Label("Clear All Data", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAddEntry) {
-                AddEntryView()
-            }
-            .sheet(isPresented: $showingCollections) {
-                CollectionsView()
-                    .onDisappear {
-                        Task {
-                            await loadData()
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                                .frame(width: 48, height: 48)
+                                .background(Color.accentColor)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                         }
                     }
-            }
-            .alert("Clear All Data", isPresented: $showingDebugMenu) {
-                Button("Cancel", role: .cancel) { }
-                Button("Clear All", role: .destructive) {
-                    Task {
-                        await clearAllData()
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
-            } message: {
-                Text("This will delete all \(items.count) entries. This action cannot be undone.")
-            }
-            .alert("Error", isPresented: $showingError) {
-                Button("OK") {
-                    errorMessage = nil
+                .refreshable {
+                    await loadData()
                 }
-            } message: {
-                if let errorMessage = errorMessage {
-                    Text(errorMessage)
-                }
-            }
-            .task {
-                guard !isPreview else { return }
-                await loadData()
-            }
-            .refreshable {
-                await loadData()
             }
         }
+        .navigationTitle(collection.name)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            viewMode = viewMode == .grid ? .list : .grid
+                        }
+                    } label: {
+                        Label(
+                            viewMode == .grid ? "Switch to List" : "Switch to Grid",
+                            systemImage: viewMode == .grid ? "list.bullet" : "square.grid.2x2"
+                        )
+                    }
+
+                    Divider()
+
+                    Button {
+                        Task {
+                            await fillWithTestData()
+                        }
+                    } label: {
+                        Label("Fill with Test Data", systemImage: "doc.badge.plus")
+                    }
+
+                    Button(role: .destructive) {
+                        showingDebugMenu = true
+                    } label: {
+                        Label("Clear All Data", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddEntry) {
+            AddEntryView(collection: collection)
+        }
+        .alert("Clear All Data", isPresented: $showingDebugMenu) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear All", role: .destructive) {
+                Task {
+                    await clearAllData()
+                }
+            }
+        } message: {
+            Text("This will delete all \(items.count) entries. This action cannot be undone.")
+        }
+        .alert("Error", isPresented: $showingError) {
+            Button("OK") {
+                errorMessage = nil
+            }
+        } message: {
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+            }
+        }
+        .task {
+            guard !isPreview else { return }
+            await loadData()
+        }
     }
-    
+
     // MARK: - Debug Actions
 
     public func fillWithTestData() async {
-        guard let moviesCollection = collections.first(where: { $0.name == "Movies" }),
-              let booksCollection = collections.first(where: { $0.name == "Books" }),
-              let gamesCollection = collections.first(where: { $0.name == "Games" }) else {
-            return
-        }
-
-        let testData: [(String?, String, String, ScoreRating, TimeInterval, [String: String], [String])] = [
-            (moviesCollection.id, "Inception", "Inception (2010) is a sci‑fi heist thriller in which Dom Cobb, a skilled thief who steals secrets from inside people’s dreams, is offered a chance to clear his criminal record. His team must attempt the harder task of “inception”—planting an idea in a target’s mind—by entering layered dream worlds with shifting rules and unstable physics. As the dreams deepen, time stretches and reality becomes harder to distinguish from illusion. The film explores memory, guilt, and perception, building to an ambiguous ending.",
+        let testData: [(String, String, ScoreRating, TimeInterval, [String: String], [String])] = [
+            ("Inception", "Inception (2010) is a sci‑fi heist thriller in which Dom Cobb, a skilled thief who steals secrets from inside people's dreams, is offered a chance to clear his criminal record.",
              .great, 0, ["Year": "2010", "Genre": "Sci-Fi, Thriller"],
              ["00000000-0000-0000-0001-000000000001"]),
-            (moviesCollection.id, "The Dark Knight", "Heath Ledger's iconic Joker performance.",
+            ("The Dark Knight", "Heath Ledger's iconic Joker performance.",
              .great, -86400 * 2, ["Year": "2008", "Genre": "Action, Drama"],
              ["00000000-0000-0000-0001-000000000004"]),
-            (booksCollection.id, "1984", "Orwell's dystopian vision of totalitarian future.",
+            ("1984", "Orwell's dystopian vision of totalitarian future.",
              .great, -86400 * 5, ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"],
              ["00000000-0000-0000-0001-000000000002"]),
-            (booksCollection.id, "Dune", "Epic science fiction masterpiece.",
+            ("Dune", "Epic science fiction masterpiece.",
              .okay, -86400 * 10, ["Year": "1965", "Genre": "Sci-Fi", "Author": "Frank Herbert"],
              []),
-            (gamesCollection.id, "Elden Ring", "Challenging but incredibly rewarding open-world adventure.",
+            ("Elden Ring", "Challenging but incredibly rewarding open-world adventure.",
              .great, -86400 * 14, ["Year": "2022", "Genre": "Action RPG", "Platform": "PC"],
              ["00000000-0000-0000-0001-000000000003"]),
-            (gamesCollection.id, "Cyberpunk 2077", "Finally fixed and pretty good now.",
+            ("Cyberpunk 2077", "Finally fixed and pretty good now.",
              .okay, -86400 * 20, ["Year": "2020", "Genre": "RPG", "Platform": "PlayStation"],
              []),
-            (nil, "Concert: Radiohead", "Amazing live performance, goosebumps throughout.",
+            ("Concert: Radiohead", "Amazing live performance, goosebumps throughout.",
              .great, -86400 * 30, [:],
              ["00000000-0000-0000-0001-000000000005"]),
-            (nil, "Cooking Class", "Learned to make pasta from scratch. Meh instructor.",
+            ("Cooking Class", "Learned to make pasta from scratch. Meh instructor.",
              .bad, -86400 * 45, [:],
              [])
         ]
 
-        for (collectionID, title, description, score, dateOffset, fields, seedIDs) in testData {
+        for (title, description, score, dateOffset, fields, seedIDs) in testData {
             do {
                 _ = try await EntryService.shared.createEntry(
-                    collectionID: collectionID,
+                    collectionID: collection.id,
                     title: title,
                     description: description,
                     score: score,
@@ -369,94 +328,9 @@ struct ContentView: View {
     }
 }
 
-struct FilterBar: View {
-    @Binding var selectedCollection: CollectionModel?
-    let collections: [CollectionModel]
-    let items: [EntryModel]
-
-    private var collectionsWithItems: [CollectionModel] {
-        collections.filter { collection in
-            items.contains { $0.collectionID == collection.id }
-        }
-    }
-
-    private var uncategorizedCount: Int {
-        items.filter { $0.collectionID == nil }.count
-    }
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                FilterPill(
-                    title: "All",
-                    icon: "🌟",
-                    count: items.count,
-                    isSelected: selectedCollection == nil
-                ) {
-                    withAnimation(.spring(response: 0.3)) {
-                        selectedCollection = nil
-                    }
-                }
-                
-                ForEach(collectionsWithItems) { collection in
-                    let count = items.filter { $0.collectionID == collection.id }.count
-                    FilterPill(
-                        title: collection.name,
-                        icon: collection.icon,
-                        count: count,
-                        isSelected: selectedCollection?.id == collection.id
-                    ) {
-                        withAnimation(.spring(response: 0.3)) {
-                            selectedCollection = collection
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-}
-
-struct FilterPill: View {
-    let title: String
-    let icon: String
-    let count: Int
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(icon)
-                    .font(.subheadline)
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Text("\(count)")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(isSelected ? Color.white.opacity(0.3) : Color(.systemGray5))
-                    )
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                Capsule()
-                    .fill(isSelected ? Color.accentColor : Color(.systemGray6))
-            )
-            .foregroundStyle(isSelected ? .white : .primary)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 struct EntryCard: View {
     let item: EntryModel
-    let collection: CollectionModel?
+    let entryType: EntryTypeModel?
     let onDelete: () async -> Void
 
     @State private var showingDeleteAlert = false
@@ -482,11 +356,11 @@ struct EntryCard: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 140)
                 .overlay(
-                    Text(collection?.icon ?? "📝")
+                    Text(entryType?.icon ?? "📝")
                         .font(.system(size: 48))
                         .opacity(0.5)
                 )
-                
+
                 if let coverImage {
                     Image(uiImage: coverImage)
                         .resizable()
@@ -503,10 +377,10 @@ struct EntryCard: View {
                     .clipShape(Circle())
                     .padding(8)
             }
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 4) {
-                    Text(collection?.icon ?? "📝")
+                    Text(entryType?.icon ?? "📝")
                         .font(.caption)
                     Text(item.date, format: .dateTime.month(.abbreviated).day())
                         .font(.caption)
@@ -577,7 +451,7 @@ struct EntryCard: View {
 
 struct EntryListRow: View {
     let item: EntryModel
-    let collection: CollectionModel?
+    let entryType: EntryTypeModel?
     let onDelete: () async -> Void
 
     @State private var showingDeleteAlert = false
@@ -585,7 +459,6 @@ struct EntryListRow: View {
     @State private var coverImage: UIImage?
 
     private var metadataLine: String {
-        // Show first line of notes
         if item.description.isEmpty {
             return "(no notes)"
         }
@@ -602,7 +475,7 @@ struct EntryListRow: View {
                     .frame(width: 60, height: 60)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
-                Text(collection?.icon ?? "📝")
+                Text(entryType?.icon ?? "📝")
                     .font(.system(size: 40))
                     .frame(width: 60, height: 60)
                     .background(
@@ -719,12 +592,13 @@ struct EmptyStateView: View {
 }
 
 #Preview("Empty State") {
-    ContentView()
+    NavigationStack {
+        ContentView(collection: CollectionModel.previewMyList)
+    }
 }
 
 #Preview("With Entries") {
-    ContentView(
-        previewItems: EntryModel.previewItems,
-        previewCollections: CollectionModel.previewCollections
-    )
+    NavigationStack {
+        ContentView(collection: CollectionModel.previewMyList, previewItems: EntryModel.previewItems)
+    }
 }

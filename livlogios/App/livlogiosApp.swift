@@ -18,7 +18,7 @@ struct livlogiosApp: App {
                 if appState.isCheckingAuth {
                     ProgressView()
                 } else if appState.isAuthenticated {
-                    ContentView()
+                    CollectionsView()
                         .connectionToast(monitor: connectionMonitor)
                 } else {
                     LoginView()

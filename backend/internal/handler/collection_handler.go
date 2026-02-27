@@ -36,11 +36,12 @@ type createCollectionRequest struct {
 }
 
 type collectionResponse struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Icon      string `json:"icon"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Icon       string `json:"icon"`
+	EntryCount int    `json:"entry_count"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 func (h *CollectionHandler) GetCollections(w http.ResponseWriter, r *http.Request) {
@@ -244,10 +245,11 @@ func (h *CollectionHandler) DeleteCollection(w http.ResponseWriter, r *http.Requ
 
 func mapCollectionToResponse(c *repository.Collection) collectionResponse {
 	return collectionResponse{
-		ID:        c.ID.String(),
-		Name:      c.Name,
-		Icon:      c.Icon,
-		CreatedAt: c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt: c.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:         c.ID.String(),
+		Name:       c.Name,
+		Icon:       c.Icon,
+		EntryCount: c.EntryCount,
+		CreatedAt:  c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:  c.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }

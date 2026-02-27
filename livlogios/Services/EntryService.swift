@@ -76,6 +76,7 @@ actor EntryService {
 
     func createEntry(
         collectionID: String?,
+        typeID: String? = nil,
         title: String,
         description: String,
         score: ScoreRating,
@@ -98,6 +99,7 @@ actor EntryService {
 
         struct Request: Codable {
             let collectionID: String?
+            let typeID: String?
             let title: String
             let description: String
             let score: Int
@@ -108,6 +110,7 @@ actor EntryService {
 
             enum CodingKeys: String, CodingKey {
                 case collectionID = "collection_id"
+                case typeID = "type_id"
                 case title
                 case description
                 case score
@@ -132,6 +135,7 @@ actor EntryService {
 
         let request = Request(
             collectionID: collectionID,
+            typeID: typeID,
             title: title,
             description: description,
             score: score.rawValue,
@@ -157,6 +161,7 @@ actor EntryService {
     func updateEntry(
         id: String,
         collectionID: String?,
+        typeID: String? = nil,
         title: String,
         description: String,
         score: ScoreRating,
@@ -178,6 +183,7 @@ actor EntryService {
 
         struct Request: Codable {
             let collectionID: String?
+            let typeID: String?
             let title: String
             let description: String
             let score: Int
@@ -187,6 +193,7 @@ actor EntryService {
 
             enum CodingKeys: String, CodingKey {
                 case collectionID = "collection_id"
+                case typeID = "type_id"
                 case title
                 case description
                 case score
@@ -210,6 +217,7 @@ actor EntryService {
 
         let request = Request(
             collectionID: collectionID,
+            typeID: typeID,
             title: title,
             description: description,
             score: score.rawValue,

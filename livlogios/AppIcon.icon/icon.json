@@ -1,30 +1,44 @@
 {
   "fill" : {
-    "solid" : "display-p3:0.44580,0.47838,0.87814,1.00000"
+    "automatic-gradient" : "srgb:0.00000,0.00000,0.00000,1.00000",
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
   },
   "groups" : [
     {
-      "blend-mode" : "normal",
       "blur-material" : null,
       "layers" : [
         {
           "blend-mode" : "normal",
-          "fill" : {
-            "solid" : "display-p3:0.99316,0.99316,0.99316,1.00000"
-          },
+          "fill" : "none",
           "glass" : true,
-          "hidden" : false,
-          "image-name" : "blossom.svg",
-          "name" : "blossom"
+          "image-name" : "icons8-birch.svg",
+          "name" : "icons8-birch",
+          "position" : {
+            "scale" : 1.8,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
-      "lighting" : "individual",
+      "name" : "Group",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
+      "specular" : true,
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
         "value" : 0.5
       }
     }

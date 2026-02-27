@@ -20,6 +20,7 @@ var (
 type Entry struct {
 	ID               uuid.UUID         `json:"id"`
 	CollectionID     *uuid.UUID        `json:"collection_id,omitempty"`
+	TypeID           *uuid.UUID        `json:"type_id,omitempty"`
 	UserID           uuid.UUID         `json:"user_id"`
 	Title            string            `json:"title"`
 	Description      string            `json:"description"`
@@ -58,6 +59,7 @@ func (r *EntryRepository) CreateEntry(
 	ctx context.Context,
 	userID uuid.UUID,
 	collectionID *uuid.UUID,
+	typeID *uuid.UUID,
 	title, description string,
 	score int,
 	date time.Time,
@@ -69,16 +71,17 @@ func (r *EntryRepository) CreateEntry(
 	}
 
 	query := `
-		INSERT INTO entries (user_id, collection_id, title, description, score, date, additional_fields)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, collection_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
+		INSERT INTO entries (user_id, collection_id, type_id, title, description, score, date, additional_fields)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
 	`
 
 	var entry Entry
 	var additionalFieldsStr string
-	err = r.db.QueryRow(ctx, query, userID, collectionID, title, description, score, date, additionalFieldsJSON).Scan(
+	err = r.db.QueryRow(ctx, query, userID, collectionID, typeID, title, description, score, date, additionalFieldsJSON).Scan(
 		&entry.ID,
 		&entry.CollectionID,
+		&entry.TypeID,
 		&entry.UserID,
 		&entry.Title,
 		&entry.Description,
@@ -107,7 +110,7 @@ func (r *EntryRepository) GetEntriesByUserID(
 	limit, offset int,
 ) ([]*Entry, error) {
 	query := `
-		SELECT id, collection_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
+		SELECT id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
 		FROM entries
 		WHERE user_id = $1
 		AND ($2::uuid IS NULL OR collection_id = $2)
@@ -128,6 +131,7 @@ func (r *EntryRepository) GetEntriesByUserID(
 		err := rows.Scan(
 			&entry.ID,
 			&entry.CollectionID,
+			&entry.TypeID,
 			&entry.UserID,
 			&entry.Title,
 			&entry.Description,
@@ -161,7 +165,7 @@ func (r *EntryRepository) GetEntryByID(
 	id uuid.UUID,
 ) (*Entry, error) {
 	query := `
-		SELECT id, collection_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
+		SELECT id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
 		FROM entries
 		WHERE id = $1
 	`
@@ -171,6 +175,7 @@ func (r *EntryRepository) GetEntryByID(
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&entry.ID,
 		&entry.CollectionID,
+		&entry.TypeID,
 		&entry.UserID,
 		&entry.Title,
 		&entry.Description,
@@ -199,6 +204,7 @@ func (r *EntryRepository) UpdateEntry(
 	ctx context.Context,
 	id uuid.UUID,
 	collectionID *uuid.UUID,
+	typeID *uuid.UUID,
 	title, description string,
 	score int,
 	date time.Time,
@@ -211,16 +217,17 @@ func (r *EntryRepository) UpdateEntry(
 
 	query := `
 		UPDATE entries
-		SET collection_id = $2, title = $3, description = $4, score = $5, date = $6, additional_fields = $7, updated_at = NOW()
+		SET collection_id = $2, type_id = $3, title = $4, description = $5, score = $6, date = $7, additional_fields = $8, updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, collection_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
+		RETURNING id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
 	`
 
 	var entry Entry
 	var additionalFieldsStr string
-	err = r.db.QueryRow(ctx, query, id, collectionID, title, description, score, date, additionalFieldsJSON).Scan(
+	err = r.db.QueryRow(ctx, query, id, collectionID, typeID, title, description, score, date, additionalFieldsJSON).Scan(
 		&entry.ID,
 		&entry.CollectionID,
+		&entry.TypeID,
 		&entry.UserID,
 		&entry.Title,
 		&entry.Description,
@@ -447,7 +454,7 @@ func (r *EntryRepository) SearchEntries(
 	limit, offset int,
 ) ([]*Entry, error) {
 	query := `
-		SELECT id, collection_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
+		SELECT id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
 		FROM entries
 		WHERE user_id = $1
 		AND (title ILIKE $2 OR description ILIKE $2)
@@ -469,6 +476,7 @@ func (r *EntryRepository) SearchEntries(
 		err := rows.Scan(
 			&entry.ID,
 			&entry.CollectionID,
+			&entry.TypeID,
 			&entry.UserID,
 			&entry.Title,
 			&entry.Description,

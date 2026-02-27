@@ -16,12 +16,13 @@ var (
 )
 
 type Collection struct {
-	ID        uuid.UUID `json:"id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Name      string    `json:"name"`
-	Icon      string    `json:"icon"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	Name       string    `json:"name"`
+	Icon       string    `json:"icon"`
+	EntryCount int       `json:"entry_count"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type CollectionRepository struct {
@@ -41,7 +42,7 @@ func (r *CollectionRepository) CreateCollection(
 	query := `
 		INSERT INTO collections (user_id, name, icon)
 		VALUES ($1, $2, $3)
-		RETURNING id, user_id, name, icon, created_at, updated_at
+		RETURNING id, user_id, name, icon, 0 AS entry_count, created_at, updated_at
 	`
 
 	var collection Collection
@@ -50,6 +51,7 @@ func (r *CollectionRepository) CreateCollection(
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
+		&collection.EntryCount,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
 	)
@@ -60,16 +62,18 @@ func (r *CollectionRepository) CreateCollection(
 	return &collection, nil
 }
 
-// GetCollectionsByUserID retrieves all collections for a user
+// GetCollectionsByUserID retrieves all collections for a user with entry counts.
 func (r *CollectionRepository) GetCollectionsByUserID(
 	ctx context.Context,
 	userID uuid.UUID,
 ) ([]*Collection, error) {
 	query := `
-		SELECT id, user_id, name, icon, created_at, updated_at
-		FROM collections
-		WHERE user_id = $1
-		ORDER BY created_at ASC
+		SELECT c.id, c.user_id, c.name, c.icon, COUNT(e.id) AS entry_count, c.created_at, c.updated_at
+		FROM collections c
+		LEFT JOIN entries e ON e.collection_id = c.id
+		WHERE c.user_id = $1
+		GROUP BY c.id
+		ORDER BY c.created_at ASC
 	`
 
 	rows, err := r.db.Query(ctx, query, userID)
@@ -86,6 +90,7 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 			&collection.UserID,
 			&collection.Name,
 			&collection.Icon,
+			&collection.EntryCount,
 			&collection.CreatedAt,
 			&collection.UpdatedAt,
 		)
@@ -102,15 +107,17 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 	return collections, nil
 }
 
-// GetCollectionByID retrieves a single collection by ID
+// GetCollectionByID retrieves a single collection by ID with entry count.
 func (r *CollectionRepository) GetCollectionByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*Collection, error) {
 	query := `
-		SELECT id, user_id, name, icon, created_at, updated_at
-		FROM collections
-		WHERE id = $1
+		SELECT c.id, c.user_id, c.name, c.icon, COUNT(e.id) AS entry_count, c.created_at, c.updated_at
+		FROM collections c
+		LEFT JOIN entries e ON e.collection_id = c.id
+		WHERE c.id = $1
+		GROUP BY c.id
 	`
 
 	var collection Collection
@@ -119,6 +126,7 @@ func (r *CollectionRepository) GetCollectionByID(
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
+		&collection.EntryCount,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
 	)
@@ -142,7 +150,7 @@ func (r *CollectionRepository) UpdateCollection(
 		UPDATE collections
 		SET name = $2, icon = $3, updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, user_id, name, icon, created_at, updated_at
+		RETURNING id, user_id, name, icon, 0 AS entry_count, created_at, updated_at
 	`
 
 	var collection Collection
@@ -151,6 +159,7 @@ func (r *CollectionRepository) UpdateCollection(
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
+		&collection.EntryCount,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
 	)
@@ -183,56 +192,32 @@ func (r *CollectionRepository) DeleteCollection(
 	return nil
 }
 
-// CreateDefaultCollections creates default collections for a new user
+// CreateDefaultCollections creates the default "My List" collection for a new user.
 func (r *CollectionRepository) CreateDefaultCollections(
 	ctx context.Context,
 	userID uuid.UUID,
 ) ([]*Collection, error) {
-	defaultCollections := []struct {
-		Name string
-		Icon string
-	}{
-		{"Movies", "🎬"},
-		{"Books", "📚"},
-		{"Games", "🎮"},
-	}
-
-	// Start transaction
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	var collections []*Collection
-
 	query := `
 		INSERT INTO collections (user_id, name, icon)
 		VALUES ($1, $2, $3)
-		RETURNING id, user_id, name, icon, created_at, updated_at
+		RETURNING id, user_id, name, icon, 0 AS entry_count, created_at, updated_at
 	`
 
-	for _, dc := range defaultCollections {
-		var collection Collection
-		err := tx.QueryRow(ctx, query, userID, dc.Name, dc.Icon).Scan(
-			&collection.ID,
-			&collection.UserID,
-			&collection.Name,
-			&collection.Icon,
-			&collection.CreatedAt,
-			&collection.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create default collection %s: %w", dc.Name, err)
-		}
-		collections = append(collections, &collection)
+	var collection Collection
+	err := r.db.QueryRow(ctx, query, userID, "My List", "📋").Scan(
+		&collection.ID,
+		&collection.UserID,
+		&collection.Name,
+		&collection.Icon,
+		&collection.EntryCount,
+		&collection.CreatedAt,
+		&collection.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default collection: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return collections, nil
+	return []*Collection{&collection}, nil
 }
 
 // HasCollections checks if user has any collections

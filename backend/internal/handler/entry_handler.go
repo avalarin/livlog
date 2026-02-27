@@ -51,27 +51,29 @@ type imageData struct {
 }
 
 type createEntryRequest struct {
-	CollectionID     *string            `json:"collection_id,omitempty"`
-	Title            string             `json:"title"`
-	Description      string             `json:"description"`
-	Score            int                `json:"score"`
-	Date             string             `json:"date"` // YYYY-MM-DD
-	AdditionalFields map[string]string  `json:"additional_fields,omitempty"`
-	Images           []imageData        `json:"images,omitempty"`
-	SeedImageIDs     []string           `json:"seed_image_ids,omitempty"`
-}
-
-type entryResponse struct {
-	ID               string            `json:"id"`
 	CollectionID     *string           `json:"collection_id,omitempty"`
+	TypeID           *string           `json:"type_id,omitempty"`
 	Title            string            `json:"title"`
 	Description      string            `json:"description"`
 	Score            int               `json:"score"`
-	Date             string            `json:"date"`
-	AdditionalFields map[string]string `json:"additional_fields"`
+	Date             string            `json:"date"` // YYYY-MM-DD
+	AdditionalFields map[string]string `json:"additional_fields,omitempty"`
+	Images           []imageData       `json:"images,omitempty"`
+	SeedImageIDs     []string          `json:"seed_image_ids,omitempty"`
+}
+
+type entryResponse struct {
+	ID               string              `json:"id"`
+	CollectionID     *string             `json:"collection_id,omitempty"`
+	TypeID           *string             `json:"type_id,omitempty"`
+	Title            string              `json:"title"`
+	Description      string              `json:"description"`
+	Score            int                 `json:"score"`
+	Date             string              `json:"date"`
+	AdditionalFields map[string]string   `json:"additional_fields"`
 	Images           []imageMetaResponse `json:"images"`
-	CreatedAt        string            `json:"created_at"`
-	UpdatedAt        string            `json:"updated_at"`
+	CreatedAt        string              `json:"created_at"`
+	UpdatedAt        string              `json:"updated_at"`
 }
 
 
@@ -161,6 +163,17 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 		collectionID = &cid
 	}
 
+	// Parse type ID
+	var typeID *uuid.UUID
+	if req.TypeID != nil {
+		tid, err := uuid.Parse(*req.TypeID)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid type ID", err)
+			return
+		}
+		typeID = &tid
+	}
+
 	// Parse date
 	date, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
@@ -198,6 +211,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		uid,
 		collectionID,
+		typeID,
 		req.Title,
 		req.Description,
 		req.Score,
@@ -292,6 +306,17 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 		collectionID = &cid
 	}
 
+	// Parse type ID
+	var typeID *uuid.UUID
+	if req.TypeID != nil {
+		tid, err := uuid.Parse(*req.TypeID)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid type ID", err)
+			return
+		}
+		typeID = &tid
+	}
+
 	// Parse date
 	date, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
@@ -321,6 +346,7 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 		eid,
 		uid,
 		collectionID,
+		typeID,
 		req.Title,
 		req.Description,
 		req.Score,
@@ -464,6 +490,12 @@ func mapEntryToResponse(e *repository.Entry, imageMetas []repository.ImageMeta) 
 		collectionID = &cid
 	}
 
+	var typeID *string
+	if e.TypeID != nil {
+		tid := e.TypeID.String()
+		typeID = &tid
+	}
+
 	images := make([]imageMetaResponse, len(imageMetas))
 	for i, m := range imageMetas {
 		images[i] = imageMetaResponse{
@@ -476,6 +508,7 @@ func mapEntryToResponse(e *repository.Entry, imageMetas []repository.ImageMeta) 
 	return entryResponse{
 		ID:               e.ID.String(),
 		CollectionID:     collectionID,
+		TypeID:           typeID,
 		Title:            e.Title,
 		Description:      e.Description,
 		Score:            e.Score,

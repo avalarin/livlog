@@ -13,7 +13,7 @@ struct EntryDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var entry: EntryModel?
-    @State private var collection: CollectionModel?
+    @State private var entryType: EntryTypeModel?
     @State private var images: [UIImage] = []
 
     @State private var showingDeleteAlert = false
@@ -34,7 +34,7 @@ struct EntryDetailView: View {
             return indexA < indexB
         }
     }
-    
+
     var body: some View {
         Group {
             if isLoading {
@@ -58,7 +58,6 @@ struct EntryDetailView: View {
                             .tabViewStyle(.page(indexDisplayMode: images.count > 1 ? .always : .never))
                             .frame(height: 300)
                         } else {
-                            // Placeholder
                             LinearGradient(
                                 colors: [
                                     Color.accentColor.opacity(0.3),
@@ -69,21 +68,21 @@ struct EntryDetailView: View {
                             )
                             .frame(height: 200)
                             .overlay(
-                                Text(collection?.icon ?? "📝")
+                                Text(entryType?.icon ?? "📝")
                                     .font(.system(size: 80))
                                     .opacity(0.5)
                             )
                         }
-                
+
                         VStack(alignment: .leading, spacing: 20) {
                             // Header
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    // Collection badge
-                                    if let collection = collection {
+                                    // Type badge
+                                    if let entryType = entryType {
                                         HStack(spacing: 6) {
-                                            Text(collection.icon)
-                                            Text(collection.name)
+                                            Text(entryType.icon)
+                                            Text(entryType.name)
                                                 .fontWeight(.medium)
                                         }
                                         .font(.subheadline)
@@ -119,35 +118,35 @@ struct EntryDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .font(.subheadline)
-                    
-                    // Additional Fields
-                    if !metadataItems.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Details")
-                                .font(.headline)
-                            
-                            LazyVGrid(columns: [
-                                GridItem(.flexible()),
-                                GridItem(.flexible())
-                            ], spacing: 12) {
-                                ForEach(metadataItems, id: \.key) { field in
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(field.key)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Text(field.value)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
+
+                            // Additional Fields
+                            if !metadataItems.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Details")
+                                        .font(.headline)
+
+                                    LazyVGrid(columns: [
+                                        GridItem(.flexible()),
+                                        GridItem(.flexible())
+                                    ], spacing: 12) {
+                                        ForEach(metadataItems, id: \.key) { field in
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(field.key)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                Text(field.value)
+                                                    .font(.subheadline)
+                                                    .fontWeight(.medium)
+                                            }
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(12)
+                                            .background(Color(.systemGray6))
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        }
                                     }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(12)
-                                    .background(Color(.systemGray6))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
                             }
-                        }
-                    }
-                    
+
                             // Description
                             if !entry.description.isEmpty {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -195,8 +194,15 @@ struct EntryDetailView: View {
                         }
                     }
                 }
-                .sheet(isPresented: $showingEditSheet) {
-                    AddEntryView(editingEntryID: entryID)
+                .sheet(isPresented: $showingEditSheet, onDismiss: {
+                    Task { await loadEntry() }
+                }) {
+                    if let collectionID = entry.collectionID {
+                        AddEntryView(
+                            collection: CollectionModel(id: collectionID, name: "", icon: "📝"),
+                            editingEntryID: entryID
+                        )
+                    }
                 }
                 .alert("Delete Entry", isPresented: $showingDeleteAlert) {
                     Button("Cancel", role: .cancel) { }
@@ -231,16 +237,13 @@ struct EntryDetailView: View {
         errorMessage = nil
 
         do {
-            // Load entry
             entry = try await EntryService.shared.getEntry(id: entryID)
 
-            // Load collection if needed
-            if let collectionID = entry?.collectionID {
-                let collections = try await CollectionService.shared.getCollections()
-                collection = collections.first { $0.id == collectionID }
+            if let typeID = entry?.typeID {
+                let types = try await TypeService.shared.getTypes()
+                entryType = types.first { $0.id == typeID }
             }
 
-            // Load images using IDs from entry
             if let entry = entry {
                 images = await loadImages(imageIDs: entry.images)
             }
