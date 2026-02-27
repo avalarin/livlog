@@ -108,14 +108,14 @@ func (s *EntryService) CreateEntry(
 		return nil, err
 	}
 
-	// Validate collection ownership if provided
+	// Validate collection access and write permission if provided
 	if collectionID != nil {
-		collection, err := s.collectionRepo.GetCollectionByID(ctx, *collectionID)
+		role, err := s.collectionRepo.GetUserRole(ctx, *collectionID, userID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid collection: %w", err)
 		}
-		if collection.UserID != userID {
-			return nil, repository.ErrCollectionNotFound
+		if role == "read" {
+			return nil, ErrNotCollectionOwner
 		}
 	}
 
@@ -176,7 +176,8 @@ func (s *EntryService) GetEntriesByUserID(
 	return s.entryRepo.GetEntriesByUserID(ctx, userID, collectionID, limit, offset)
 }
 
-// GetEntryByID retrieves a single entry
+// GetEntryByID retrieves a single entry.
+// Access is granted to the entry's creator or to any member of the entry's collection.
 func (s *EntryService) GetEntryByID(
 	ctx context.Context,
 	id uuid.UUID,
@@ -187,12 +188,18 @@ func (s *EntryService) GetEntryByID(
 		return nil, err
 	}
 
-	// Check ownership
-	if entry.UserID != userID {
-		return nil, repository.ErrEntryNotFound
+	if entry.UserID == userID {
+		return entry, nil
 	}
 
-	return entry, nil
+	// Allow access if the user is a member of the entry's collection.
+	if entry.CollectionID != nil {
+		if _, err := s.collectionRepo.GetUserRole(ctx, *entry.CollectionID, userID); err == nil {
+			return entry, nil
+		}
+	}
+
+	return nil, repository.ErrEntryNotFound
 }
 
 // UpdateEntry updates an entry with validation
@@ -208,10 +215,23 @@ func (s *EntryService) UpdateEntry(
 	additionalFields map[string]string,
 	images []repository.EntryImage,
 ) (*repository.Entry, error) {
-	// Check ownership
-	_, err := s.GetEntryByID(ctx, id, userID)
+	// Fetch at repo level to check access against the entry's current collection.
+	existing, err := s.entryRepo.GetEntryByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify the caller may write to the entry's current collection.
+	if existing.CollectionID != nil {
+		role, err := s.collectionRepo.GetUserRole(ctx, *existing.CollectionID, userID)
+		if err != nil {
+			return nil, repository.ErrEntryNotFound
+		}
+		if role == "read" {
+			return nil, ErrNotCollectionOwner
+		}
+	} else if existing.UserID != userID {
+		return nil, repository.ErrEntryNotFound
 	}
 
 	// Validate title
@@ -236,14 +256,14 @@ func (s *EntryService) UpdateEntry(
 		return nil, err
 	}
 
-	// Validate collection ownership if provided
+	// If moving the entry to a different collection, verify write access there too.
 	if collectionID != nil {
-		collection, err := s.collectionRepo.GetCollectionByID(ctx, *collectionID)
+		role, err := s.collectionRepo.GetUserRole(ctx, *collectionID, userID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid collection: %w", err)
 		}
-		if collection.UserID != userID {
-			return nil, repository.ErrCollectionNotFound
+		if role == "read" {
+			return nil, ErrNotCollectionOwner
 		}
 	}
 
@@ -277,16 +297,29 @@ func (s *EntryService) UpdateEntry(
 	return entry, nil
 }
 
-// DeleteEntry deletes an entry
+// DeleteEntry deletes an entry.
+// Users with owner/write access to the entry's collection may delete any entry in it.
+// Entries without a collection may only be deleted by their creator.
 func (s *EntryService) DeleteEntry(
 	ctx context.Context,
 	id uuid.UUID,
 	userID uuid.UUID,
 ) error {
-	// Check ownership
-	_, err := s.GetEntryByID(ctx, id, userID)
+	entry, err := s.entryRepo.GetEntryByID(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	if entry.CollectionID != nil {
+		role, err := s.collectionRepo.GetUserRole(ctx, *entry.CollectionID, userID)
+		if err != nil {
+			return fmt.Errorf("invalid collection: %w", err)
+		}
+		if role == "read" {
+			return ErrNotCollectionOwner
+		}
+	} else if entry.UserID != userID {
+		return repository.ErrEntryNotFound
 	}
 
 	return s.entryRepo.DeleteEntry(ctx, id)

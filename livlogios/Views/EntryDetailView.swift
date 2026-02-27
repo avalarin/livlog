@@ -9,8 +9,14 @@ import SwiftUI
 
 struct EntryDetailView: View {
     let entryID: String
+    let myRole: CollectionRole
 
     @Environment(\.dismiss) private var dismiss
+
+    init(entryID: String, myRole: CollectionRole = .owner) {
+        self.entryID = entryID
+        self.myRole = myRole
+    }
 
     @State private var entry: EntryModel?
     @State private var entryType: EntryTypeModel?
@@ -176,20 +182,24 @@ struct EntryDetailView: View {
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         HStack(spacing: 12) {
-                            Button {
-                                showingEditSheet = true
-                            } label: {
-                                Image(systemName: "pencil.circle")
+                            if myRole.canWrite {
+                                Button {
+                                    showingEditSheet = true
+                                } label: {
+                                    Image(systemName: "pencil.circle")
+                                }
                             }
 
-                            Menu {
-                                Button(role: .destructive) {
-                                    showingDeleteAlert = true
+                            if myRole.canWrite {
+                                Menu {
+                                    Button(role: .destructive) {
+                                        showingDeleteAlert = true
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
                                 } label: {
-                                    Label("Delete", systemImage: "trash")
+                                    Image(systemName: "ellipsis.circle")
                                 }
-                            } label: {
-                                Image(systemName: "ellipsis.circle")
                             }
                         }
                     }

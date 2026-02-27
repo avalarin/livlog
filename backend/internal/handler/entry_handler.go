@@ -230,6 +230,14 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			respondWithError(w, http.StatusBadRequest, "Collection not found or not accessible", err)
+			return
+		}
+		if errors.Is(err, service.ErrNotCollectionOwner) {
+			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, "Failed to create entry", err)
 		return
 	}
@@ -370,6 +378,14 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			respondWithError(w, http.StatusBadRequest, "Collection not found or not accessible", err)
+			return
+		}
+		if errors.Is(err, service.ErrNotCollectionOwner) {
+			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, "Failed to update entry", err)
 		return
 	}
@@ -402,6 +418,14 @@ func (h *EntryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, repository.ErrEntryNotFound) {
 			respondWithError(w, http.StatusNotFound, "Entry not found", err)
+			return
+		}
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
+			return
+		}
+		if errors.Is(err, service.ErrNotCollectionOwner) {
+			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
 			return
 		}
 		respondWithError(w, http.StatusInternalServerError, "Failed to delete entry", err)

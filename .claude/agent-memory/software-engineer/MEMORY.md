@@ -73,3 +73,11 @@ All readers must also use the same typed constant, not a raw string.
 **`onChange(of:)` requires `Equatable`** — when observing a custom model type
 - Add `Equatable` conformance to the model (`struct EntryTypeModel: Codable, Identifiable, Equatable`)
 - Struct with only `Codable`-conforming stored properties can use synthesized `Equatable`
+
+**pgx unique constraint violation detection** — pgx v5 wraps the PgError; check `err.Error()` for "23505" or constraint name
+- Use `strings.Contains(err.Error(), "23505")` or the constraint name string
+- Pattern: `if strings.Contains(msg, "23505") || strings.Contains(msg, "uq_my_constraint") { return ErrAlreadyX }`
+
+**Transactional collection creation** — when creating a collection also needs a share row:
+- Use `tx, err := r.db.Begin(ctx)` + `defer tx.Rollback(ctx)` + `tx.Commit(ctx)` in repo
+- Insert collection, insert share row in same tx, return assembled struct with hardcoded role/count

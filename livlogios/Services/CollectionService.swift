@@ -88,4 +88,42 @@ actor CollectionService {
             method: "DELETE"
         )
     }
+
+    // MARK: - Get Members
+
+    func getMembers(collectionID: String) async throws -> [CollectionMember] {
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(collectionID)/members",
+            method: "GET"
+        )
+
+        return try decoder.decode([CollectionMember].self, from: data)
+    }
+
+    // MARK: - Add Share
+
+    func addShare(collectionID: String, email: String, role: CollectionRole) async throws {
+        struct Request: Codable {
+            let email: String
+            let role: String
+        }
+
+        let request = Request(email: email, role: role.rawValue)
+        let bodyData = try encoder.encode(request)
+
+        _ = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(collectionID)/shares",
+            method: "POST",
+            body: bodyData
+        )
+    }
+
+    // MARK: - Remove Share
+
+    func removeShare(collectionID: String, userID: String) async throws {
+        _ = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(collectionID)/shares/\(userID)",
+            method: "DELETE"
+        )
+    }
 }

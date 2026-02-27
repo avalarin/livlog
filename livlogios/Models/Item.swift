@@ -7,6 +7,34 @@
 
 import Foundation
 
+// MARK: - Collection Role
+
+enum CollectionRole: String, Codable {
+    case owner
+    case write
+    case read
+
+    var canEdit: Bool { self == .owner }
+    var canWrite: Bool { self == .owner || self == .write }
+}
+
+// MARK: - Collection Member
+
+struct CollectionMember: Codable, Identifiable {
+    var id: String { userId }
+    let userId: String
+    let email: String?
+    let displayName: String?
+    let role: CollectionRole
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case email
+        case displayName = "display_name"
+        case role
+    }
+}
+
 // MARK: - Collection Model
 
 struct CollectionModel: Codable, Identifiable {
@@ -14,6 +42,8 @@ struct CollectionModel: Codable, Identifiable {
     let name: String
     let icon: String
     let entryCount: Int
+    let memberCount: Int
+    let myRole: CollectionRole
     let createdAt: Date
     let updatedAt: Date
 
@@ -22,15 +52,28 @@ struct CollectionModel: Codable, Identifiable {
         case name
         case icon
         case entryCount = "entry_count"
+        case memberCount = "member_count"
+        case myRole = "my_role"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
 
-    init(id: String, name: String, icon: String, entryCount: Int = 0, createdAt: Date = .now, updatedAt: Date = .now) {
+    init(
+        id: String,
+        name: String,
+        icon: String,
+        entryCount: Int = 0,
+        memberCount: Int = 1,
+        myRole: CollectionRole = .owner,
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
         self.id = id
         self.name = name
         self.icon = icon
         self.entryCount = entryCount
+        self.memberCount = memberCount
+        self.myRole = myRole
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -42,6 +85,8 @@ struct CollectionModel: Codable, Identifiable {
         name = try container.decode(String.self, forKey: .name)
         icon = try container.decode(String.self, forKey: .icon)
         entryCount = try container.decodeIfPresent(Int.self, forKey: .entryCount) ?? 0
+        memberCount = try container.decodeIfPresent(Int.self, forKey: .memberCount) ?? 1
+        myRole = try container.decodeIfPresent(CollectionRole.self, forKey: .myRole) ?? .read
 
         // Decode ISO8601 timestamps
         let iso8601Formatter = ISO8601DateFormatter()
@@ -85,6 +130,8 @@ struct CollectionModel: Codable, Identifiable {
         try container.encode(name, forKey: .name)
         try container.encode(icon, forKey: .icon)
         try container.encode(entryCount, forKey: .entryCount)
+        try container.encode(memberCount, forKey: .memberCount)
+        try container.encode(myRole, forKey: .myRole)
 
         // Encode timestamps as ISO8601
         let iso8601Formatter = ISO8601DateFormatter()

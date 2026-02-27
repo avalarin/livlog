@@ -100,7 +100,7 @@ func main() {
 	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, jwtService, rateLimiter)
 
 	// Initialize collection, entry, and type services
-	collectionService := service.NewCollectionService(collectionRepo)
+	collectionService := service.NewCollectionService(collectionRepo, userRepo)
 	entryService := service.NewEntryService(entryRepo, collectionRepo, typeRepo)
 	typeService := service.NewTypeService(typeRepo)
 

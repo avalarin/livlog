@@ -102,23 +102,47 @@ func (r *EntryRepository) CreateEntry(
 	return &entry, nil
 }
 
-// GetEntriesByUserID retrieves entries for a user with optional filters
+// GetEntriesByUserID retrieves entries for a user with optional filters.
+// When collectionID is provided all entries in that collection are returned
+// (access is validated via collection_shares JOIN). Without collectionID,
+// only entries created by the user are returned.
 func (r *EntryRepository) GetEntriesByUserID(
 	ctx context.Context,
 	userID uuid.UUID,
 	collectionID *uuid.UUID,
 	limit, offset int,
 ) ([]*Entry, error) {
-	query := `
-		SELECT id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
-		FROM entries
-		WHERE user_id = $1
-		AND ($2::uuid IS NULL OR collection_id = $2)
-		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4
-	`
+	var (
+		query string
+		args  []any
+	)
 
-	rows, err := r.db.Query(ctx, query, userID, collectionID, limit, offset)
+	if collectionID != nil {
+		query = `
+			SELECT id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
+			FROM entries
+			WHERE collection_id = $2
+			  AND EXISTS (
+			      SELECT 1 FROM collection_shares
+			      WHERE collection_id = $2
+			        AND shared_with_user_id = $1
+			  )
+			ORDER BY created_at DESC
+			LIMIT $3 OFFSET $4
+		`
+		args = []any{userID, *collectionID, limit, offset}
+	} else {
+		query = `
+			SELECT id, collection_id, type_id, user_id, title, description, score, date, additional_fields, created_at, updated_at
+			FROM entries
+			WHERE user_id = $1
+			ORDER BY created_at DESC
+			LIMIT $2 OFFSET $3
+		`
+		args = []any{userID, limit, offset}
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query entries: %w", err)
 	}
@@ -536,9 +560,26 @@ func (r *EntryRepository) UpsertSeedImages(ctx context.Context, images map[uuid.
 	return nil
 }
 
-// DeleteEntriesByIDs deletes multiple entries by ID, restricted to a given user.
+// DeleteEntriesByIDs deletes multiple entries by ID.
+// An entry is deleted when the caller is its creator OR has owner/write role
+// in the entry's collection — consistent with the single-entry delete policy.
 func (r *EntryRepository) DeleteEntriesByIDs(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) (int64, error) {
-	query := `DELETE FROM entries WHERE id = ANY($1) AND user_id = $2`
+	query := `
+		DELETE FROM entries
+		WHERE id = ANY($1)
+		  AND (
+		      user_id = $2
+		      OR (
+		          collection_id IS NOT NULL
+		          AND EXISTS (
+		              SELECT 1 FROM collection_shares
+		              WHERE collection_id = entries.collection_id
+		                AND shared_with_user_id = $2
+		                AND permission_level IN ('owner', 'write')
+		          )
+		      )
+		  )
+	`
 	result, err := r.db.Exec(ctx, query, ids, userID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete entries: %w", err)

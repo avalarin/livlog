@@ -16,7 +16,8 @@
       "Bash(just:*)",
       "mcp__xcodebuildmcp__*",
       "Bash(xcrun simctl:*)",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(git rebase:*)"
     ]
   },
   "hooks": {

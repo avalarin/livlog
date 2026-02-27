@@ -112,13 +112,15 @@ struct ContentView: View {
 
                 Spacer()
 
-                Button {
-                    showingBulkDeleteAlert = true
-                } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(selectedIDs.isEmpty ? Color.secondary : Color.red)
+                if collection.myRole.canWrite {
+                    Button {
+                        showingBulkDeleteAlert = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(selectedIDs.isEmpty ? Color.secondary : Color.red)
+                    }
+                    .disabled(selectedIDs.isEmpty)
                 }
-                .disabled(selectedIDs.isEmpty)
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -155,18 +157,20 @@ struct ContentView: View {
                         Label("Select", systemImage: "checkmark.circle")
                     }
 
-                    Divider()
+                    if collection.myRole.canWrite {
+                        Divider()
 
-                    Button {
-                        Task { await fillWithTestData() }
-                    } label: {
-                        Label("Fill with Test Data", systemImage: "doc.badge.plus")
-                    }
+                        Button {
+                            Task { await fillWithTestData() }
+                        } label: {
+                            Label("Fill with Test Data", systemImage: "doc.badge.plus")
+                        }
 
-                    Button(role: .destructive) {
-                        showingDebugMenu = true
-                    } label: {
-                        Label("Clear All Data", systemImage: "trash")
+                        Button(role: .destructive) {
+                            showingDebugMenu = true
+                        } label: {
+                            Label("Clear All Data", systemImage: "trash")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -210,18 +214,20 @@ struct ContentView: View {
                                                 entryType: entryType,
                                                 onDelete: { await deleteEntry(item) },
                                                 isSelectMode: true,
-                                                isSelected: selectedIDs.contains(item.id)
+                                                isSelected: selectedIDs.contains(item.id),
+                                                canWrite: collection.myRole.canWrite
                                             )
                                         }
                                         .buttonStyle(.plain)
                                     } else {
-                                        NavigationLink(destination: EntryDetailView(entryID: item.id)) {
+                                        NavigationLink(destination: EntryDetailView(entryID: item.id, myRole: collection.myRole)) {
                                             EntryCard(
                                                 item: item,
                                                 entryType: entryType,
                                                 onDelete: { await deleteEntry(item) },
                                                 isSelectMode: false,
-                                                isSelected: false
+                                                isSelected: false,
+                                                canWrite: collection.myRole.canWrite
                                             )
                                         }
                                         .buttonStyle(.plain)
@@ -246,18 +252,20 @@ struct ContentView: View {
                                                 entryType: entryType,
                                                 onDelete: { await deleteEntry(item) },
                                                 isSelectMode: true,
-                                                isSelected: selectedIDs.contains(item.id)
+                                                isSelected: selectedIDs.contains(item.id),
+                                                canWrite: collection.myRole.canWrite
                                             )
                                         }
                                         .buttonStyle(.plain)
                                     } else {
-                                        NavigationLink(destination: EntryDetailView(entryID: item.id)) {
+                                        NavigationLink(destination: EntryDetailView(entryID: item.id, myRole: collection.myRole)) {
                                             EntryListRow(
                                                 item: item,
                                                 entryType: entryType,
                                                 onDelete: { await deleteEntry(item) },
                                                 isSelectMode: false,
-                                                isSelected: false
+                                                isSelected: false,
+                                                canWrite: collection.myRole.canWrite
                                             )
                                         }
                                         .buttonStyle(.plain)
@@ -277,17 +285,17 @@ struct ContentView: View {
                     if !isSelectMode {
                         HStack {
                             Spacer()
-                            Button {
-                                showingAddEntry = true
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 48, height: 48)
-                                    .background(Color.accentColor)
-                                    .clipShape(Circle())
-                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                                Button {
+                                    showingAddEntry = true
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.title2)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.white)
+                                        .frame(width: 48, height: 48)
+                                        .background(Color.accentColor)
+                                        .clipShape(Circle())
+                                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -416,6 +424,7 @@ struct EntryCard: View {
     var onDelete: (() async -> Void)? = nil
     var isSelectMode: Bool = false
     var isSelected: Bool = false
+    var canWrite: Bool = true
 
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
@@ -512,10 +521,12 @@ struct EntryCard: View {
         .opacity(isDeleting ? 0.5 : 1.0)
         .if(!isSelectMode && onDelete != nil) { view in
             view.contextMenu {
-                Button(role: .destructive) {
-                    showingDeleteAlert = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                if canWrite {
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
             }
         }
@@ -554,6 +565,7 @@ struct EntryListRow: View {
     var onDelete: (() async -> Void)? = nil
     var isSelectMode: Bool = false
     var isSelected: Bool = false
+    var canWrite: Bool = true
 
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
@@ -626,10 +638,12 @@ struct EntryListRow: View {
         .opacity(isDeleting ? 0.5 : 1.0)
         .if(!isSelectMode && onDelete != nil) { view in
             view.contextMenu {
-                Button(role: .destructive) {
-                    showingDeleteAlert = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                if canWrite {
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
             }
         }
