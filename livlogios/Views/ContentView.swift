@@ -27,7 +27,7 @@ struct ContentView: View {
     }
 
     @State private var showingAddEntry = false
-    @State private var searchText = ""
+    @State private var showingSearch = false
     @State private var showingDebugMenu = false
     @State private var isSelectMode = false
     @State private var selectedIDs = Set<String>()
@@ -51,14 +51,6 @@ struct ContentView: View {
         Array(repeating: GridItem(.flexible(), spacing: 12), count: columnCount())
     }
 
-    var filteredItems: [EntryModel] {
-        guard !searchText.isEmpty else { return items }
-        return items.filter {
-            $0.title.localizedCaseInsensitiveContains(searchText) ||
-            $0.description.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
     func loadData() async {
         isLoading = true
         errorMessage = nil
@@ -70,8 +62,9 @@ struct ContentView: View {
             items = try await entriesTask
             types = try await typesTask
             selectedIDs.removeAll()
+        } catch is CancellationError {
+            return
         } catch {
-            guard !Task.isCancelled else { return }
             errorMessage = "Failed to load data: \(error.localizedDescription)"
             showingError = true
         }
@@ -102,6 +95,87 @@ struct ContentView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if isSelectMode {
+            ToolbarItemGroup(placement: .bottomBar) {
+                let allIDs = Set(items.map { $0.id })
+                Button {
+                    if selectedIDs == allIDs {
+                        selectedIDs.removeAll()
+                    } else {
+                        selectedIDs = allIDs
+                    }
+                } label: {
+                    Text(selectedIDs == allIDs ? "Deselect All" : "Select All")
+                }
+
+                Spacer()
+
+                Button {
+                    showingBulkDeleteAlert = true
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(selectedIDs.isEmpty ? Color.secondary : Color.red)
+                }
+                .disabled(selectedIDs.isEmpty)
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isSelectMode = false
+                    selectedIDs.removeAll()
+                } label: {
+                    Image(systemName: "checkmark")
+                }
+            }
+        } else {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    showingSearch = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+
+                Menu {
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            viewMode = viewMode == .grid ? .list : .grid
+                        }
+                    } label: {
+                        Label(
+                            viewMode == .grid ? "Switch to List" : "Switch to Grid",
+                            systemImage: viewMode == .grid ? "list.bullet" : "square.grid.2x2"
+                        )
+                    }
+
+                    Button {
+                        isSelectMode = true
+                    } label: {
+                        Label("Select", systemImage: "checkmark.circle")
+                    }
+
+                    Divider()
+
+                    Button {
+                        Task { await fillWithTestData() }
+                    } label: {
+                        Label("Fill with Test Data", systemImage: "doc.badge.plus")
+                    }
+
+                    Button(role: .destructive) {
+                        showingDebugMenu = true
+                    } label: {
+                        Label("Clear All Data", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -119,91 +193,78 @@ struct ContentView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        if filteredItems.isEmpty && !searchText.isEmpty {
-                            VStack(spacing: 12) {
-                                Text("No matches")
-                                    .font(.headline)
-                                    .foregroundStyle(.secondary)
-                                Text("Try adjusting your search")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.tertiary)
+                        if viewMode == .grid {
+                            LazyVGrid(columns: gridColumns, spacing: 12) {
+                                ForEach(items) { item in
+                                    let entryType = types.first { $0.id == item.typeID }
+                                    if isSelectMode {
+                                        Button {
+                                            if selectedIDs.contains(item.id) {
+                                                selectedIDs.remove(item.id)
+                                            } else {
+                                                selectedIDs.insert(item.id)
+                                            }
+                                        } label: {
+                                            EntryCard(
+                                                item: item,
+                                                entryType: entryType,
+                                                onDelete: { await deleteEntry(item) },
+                                                isSelectMode: true,
+                                                isSelected: selectedIDs.contains(item.id)
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                    } else {
+                                        NavigationLink(destination: EntryDetailView(entryID: item.id)) {
+                                            EntryCard(
+                                                item: item,
+                                                entryType: entryType,
+                                                onDelete: { await deleteEntry(item) },
+                                                isSelectMode: false,
+                                                isSelected: false
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
+                            .padding(.horizontal)
                         } else {
-                            if viewMode == .grid {
-                                LazyVGrid(columns: gridColumns, spacing: 12) {
-                                    ForEach(filteredItems) { item in
-                                        let entryType = types.first { $0.id == item.typeID }
-                                        if isSelectMode {
-                                            Button {
-                                                if selectedIDs.contains(item.id) {
-                                                    selectedIDs.remove(item.id)
-                                                } else {
-                                                    selectedIDs.insert(item.id)
-                                                }
-                                            } label: {
-                                                EntryCard(
-                                                    item: item,
-                                                    entryType: entryType,
-                                                    onDelete: { await deleteEntry(item) },
-                                                    isSelectMode: true,
-                                                    isSelected: selectedIDs.contains(item.id)
-                                                )
+                            LazyVStack(spacing: 8) {
+                                ForEach(items) { item in
+                                    let entryType = types.first { $0.id == item.typeID }
+                                    if isSelectMode {
+                                        Button {
+                                            if selectedIDs.contains(item.id) {
+                                                selectedIDs.remove(item.id)
+                                            } else {
+                                                selectedIDs.insert(item.id)
                                             }
-                                            .buttonStyle(.plain)
-                                        } else {
-                                            NavigationLink(destination: EntryDetailView(entryID: item.id)) {
-                                                EntryCard(
-                                                    item: item,
-                                                    entryType: entryType,
-                                                    onDelete: { await deleteEntry(item) },
-                                                    isSelectMode: false,
-                                                    isSelected: false
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
+                                        } label: {
+                                            EntryListRow(
+                                                item: item,
+                                                entryType: entryType,
+                                                onDelete: { await deleteEntry(item) },
+                                                isSelectMode: true,
+                                                isSelected: selectedIDs.contains(item.id)
+                                            )
                                         }
+                                        .buttonStyle(.plain)
+                                    } else {
+                                        NavigationLink(destination: EntryDetailView(entryID: item.id)) {
+                                            EntryListRow(
+                                                item: item,
+                                                entryType: entryType,
+                                                onDelete: { await deleteEntry(item) },
+                                                isSelectMode: false,
+                                                isSelected: false
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
-                                .padding(.horizontal)
-                            } else {
-                                LazyVStack(spacing: 8) {
-                                    ForEach(filteredItems) { item in
-                                        let entryType = types.first { $0.id == item.typeID }
-                                        if isSelectMode {
-                                            Button {
-                                                if selectedIDs.contains(item.id) {
-                                                    selectedIDs.remove(item.id)
-                                                } else {
-                                                    selectedIDs.insert(item.id)
-                                                }
-                                            } label: {
-                                                EntryListRow(
-                                                    item: item,
-                                                    entryType: entryType,
-                                                    onDelete: { await deleteEntry(item) },
-                                                    isSelectMode: true,
-                                                    isSelected: selectedIDs.contains(item.id)
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-                                        } else {
-                                            NavigationLink(destination: EntryDetailView(entryID: item.id)) {
-                                                EntryListRow(
-                                                    item: item,
-                                                    entryType: entryType,
-                                                    onDelete: { await deleteEntry(item) },
-                                                    isSelectMode: false,
-                                                    isSelected: false
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal)
                             }
+                            .padding(.horizontal)
                         }
                     }
                     .onGeometryChange(for: CGFloat.self) { proxy in
@@ -214,26 +275,8 @@ struct ContentView: View {
                 }
                 .safeAreaInset(edge: .bottom) {
                     if !isSelectMode {
-                        HStack(spacing: 12) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundStyle(.secondary)
-                                    .font(.subheadline)
-                                TextField("Search entries...", text: $searchText)
-                                    .textFieldStyle(.automatic)
-                                if !searchText.isEmpty {
-                                    Button {
-                                        searchText = ""
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-
+                        HStack {
+                            Spacer()
                             Button {
                                 showingAddEntry = true
                             } label: {
@@ -260,84 +303,12 @@ struct ContentView: View {
         .navigationTitle(isSelectMode
             ? (selectedIDs.isEmpty ? "Select Entries" : "\(selectedIDs.count) Selected")
             : collection.name)
-        .toolbar {
-            if isSelectMode {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    Button {
-                        let allIDs = Set(filteredItems.map { $0.id })
-                        if selectedIDs == allIDs {
-                            selectedIDs.removeAll()
-                        } else {
-                            selectedIDs = allIDs
-                        }
-                    } label: {
-                        Text(selectedIDs == Set(filteredItems.map { $0.id }) ? "Deselect All" : "Select All")
-                    }
-
-                    Spacer()
-
-                    Button {
-                        showingBulkDeleteAlert = true
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(selectedIDs.isEmpty ? Color.secondary : Color.red)
-                    }
-                    .disabled(selectedIDs.isEmpty)
-                }
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                if isSelectMode {
-                    Button {
-                        isSelectMode = false
-                        selectedIDs.removeAll()
-                    } label: {
-                        Image(systemName: "checkmark")
-                    }
-                } else {
-                    Menu {
-                        Button {
-                            withAnimation(.spring(response: 0.3)) {
-                                viewMode = viewMode == .grid ? .list : .grid
-                            }
-                        } label: {
-                            Label(
-                                viewMode == .grid ? "Switch to List" : "Switch to Grid",
-                                systemImage: viewMode == .grid ? "list.bullet" : "square.grid.2x2"
-                            )
-                        }
-
-                        Button {
-                            searchText = ""
-                            isSelectMode = true
-                        } label: {
-                            Label("Select", systemImage: "checkmark.circle")
-                        }
-
-                        Divider()
-
-                        Button {
-                            Task {
-                                await fillWithTestData()
-                            }
-                        } label: {
-                            Label("Fill with Test Data", systemImage: "doc.badge.plus")
-                        }
-
-                        Button(role: .destructive) {
-                            showingDebugMenu = true
-                        } label: {
-                            Label("Clear All Data", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                }
-            }
-        }
+        .toolbar { toolbarContent }
         .sheet(isPresented: $showingAddEntry) {
             AddEntryView(collection: collection)
+        }
+        .fullScreenCover(isPresented: $showingSearch) {
+            SearchView(types: types)
         }
         .alert("Delete \(selectedIDs.count) \(selectedIDs.count == 1 ? "Entry" : "Entries")", isPresented: $showingBulkDeleteAlert) {
             Button("Cancel", role: .cancel) { }
@@ -364,11 +335,6 @@ struct ContentView: View {
         } message: {
             if let errorMessage = errorMessage {
                 Text(errorMessage)
-            }
-        }
-        .onChange(of: searchText) {
-            if isSelectMode {
-                selectedIDs.removeAll()
             }
         }
         .task {
@@ -447,7 +413,7 @@ struct ContentView: View {
 struct EntryCard: View {
     let item: EntryModel
     let entryType: EntryTypeModel?
-    let onDelete: () async -> Void
+    var onDelete: (() async -> Void)? = nil
     var isSelectMode: Bool = false
     var isSelected: Bool = false
 
@@ -544,7 +510,7 @@ struct EntryCard: View {
         }
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
         .opacity(isDeleting ? 0.5 : 1.0)
-        .if(!isSelectMode) { view in
+        .if(!isSelectMode && onDelete != nil) { view in
             view.contextMenu {
                 Button(role: .destructive) {
                     showingDeleteAlert = true
@@ -556,9 +522,11 @@ struct EntryCard: View {
         .alert("Delete Entry", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                Task {
-                    isDeleting = true
-                    await onDelete()
+                if let onDelete {
+                    Task {
+                        isDeleting = true
+                        await onDelete()
+                    }
                 }
             }
         } message: {
@@ -583,7 +551,7 @@ struct EntryCard: View {
 struct EntryListRow: View {
     let item: EntryModel
     let entryType: EntryTypeModel?
-    let onDelete: () async -> Void
+    var onDelete: (() async -> Void)? = nil
     var isSelectMode: Bool = false
     var isSelected: Bool = false
 
@@ -656,7 +624,7 @@ struct EntryListRow: View {
         .overlay(RoundedRectangle(cornerRadius: 12).fill(isSelected ? Color.gray.opacity(0.2) : Color.clear))
         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
         .opacity(isDeleting ? 0.5 : 1.0)
-        .if(!isSelectMode) { view in
+        .if(!isSelectMode && onDelete != nil) { view in
             view.contextMenu {
                 Button(role: .destructive) {
                     showingDeleteAlert = true
@@ -668,9 +636,11 @@ struct EntryListRow: View {
         .alert("Delete Entry", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                Task {
-                    isDeleting = true
-                    await onDelete()
+                if let onDelete {
+                    Task {
+                        isDeleting = true
+                        await onDelete()
+                    }
                 }
             }
         } message: {
@@ -745,6 +715,15 @@ extension View {
         }
     }
 
+    /// Applies `.glassEffect(in:)` on iOS 26+, falls back to `.thinMaterial` on earlier versions.
+    @ViewBuilder
+    func glassOrMaterial<S: Shape>(in shape: S) -> some View {
+        if #available(iOS 26, *) {
+            self.glassEffect(in: shape)
+        } else {
+            self.background(.thinMaterial, in: shape)
+        }
+    }
 }
 
 
