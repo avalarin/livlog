@@ -1,4 +1,5 @@
 ---
+name: feature-dev
 description: Guided feature development with codebase understanding and architecture focus
 argument-hint: Optional feature description
 ---
@@ -99,28 +100,17 @@ If the user says "whatever you think is best", provide your recommendation and g
 
 ---
 
-## Phase 6: Quality Review
-
-**Goal**: Ensure code is simple, DRY, elegant, easy to read, and functionally correct
-
-**Actions**:
-1. Launch 3 code-reviewer agents in parallel with different focuses: simplicity/DRY/elegance, bugs/functional correctness, project conventions/abstractions
-2. Consolidate findings and identify highest severity issues that you recommend fixing
-3. **Present findings to user and ask what they want to do** (fix now, fix later, or proceed as-is)
-4. Address issues based on user decision
-
----
-
-## Phase 7: Summary
+## Phase 6: Summary
 
 **Goal**: Document what was accomplished
 
 **Actions**:
-1. Mark all todos complete
-2. Summarize:
+- Summarize:
    - What was built
    - Key decisions made
    - Files modified
    - Suggested next steps
 
 ---
+
+NOTE: Code review is handled automatically via hooks, so there’s no need to ping a reviewer separately.
