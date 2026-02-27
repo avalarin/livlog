@@ -536,6 +536,16 @@ func (r *EntryRepository) UpsertSeedImages(ctx context.Context, images map[uuid.
 	return nil
 }
 
+// DeleteEntriesByIDs deletes multiple entries by ID, restricted to a given user.
+func (r *EntryRepository) DeleteEntriesByIDs(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) (int64, error) {
+	query := `DELETE FROM entries WHERE id = ANY($1) AND user_id = $2`
+	result, err := r.db.Exec(ctx, query, ids, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete entries: %w", err)
+	}
+	return result.RowsAffected(), nil
+}
+
 // CopySeedImagesToEntry copies seed images into entry_images for a specific entry.
 func (r *EntryRepository) CopySeedImagesToEntry(ctx context.Context, entryID uuid.UUID, seedImageIDs []uuid.UUID) error {
 	tx, err := r.db.Begin(ctx)

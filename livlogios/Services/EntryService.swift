@@ -246,6 +246,23 @@ actor EntryService {
         )
     }
 
+    // MARK: - Bulk Delete Entries
+
+    func bulkDeleteEntries(ids: [String]) async throws {
+        struct BulkDeleteRequest: Encodable {
+            let ids: [String]
+        }
+        let body = try encoder.encode(BulkDeleteRequest(ids: ids))
+        let (_, response) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/entries",
+            method: "DELETE",
+            body: body
+        )
+        guard response.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+    }
+
     // MARK: - Get Image
 
     func getImage(imageID: String) async throws -> Data {

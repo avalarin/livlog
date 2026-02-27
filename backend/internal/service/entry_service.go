@@ -292,6 +292,12 @@ func (s *EntryService) DeleteEntry(
 	return s.entryRepo.DeleteEntry(ctx, id)
 }
 
+// DeleteEntries bulk-deletes entries owned by userID. Returns the count of deleted rows.
+// Callers are responsible for validating that ids is non-empty and within size limits.
+func (s *EntryService) DeleteEntries(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) (int64, error) {
+	return s.entryRepo.DeleteEntriesByIDs(ctx, ids, userID)
+}
+
 // GetImageByID retrieves a single image by ID without ownership check.
 // Images are served on a public endpoint — access control is by UUID obscurity.
 func (s *EntryService) GetImageByID(

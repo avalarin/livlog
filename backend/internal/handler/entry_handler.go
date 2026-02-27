@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -33,6 +34,7 @@ func NewEntryHandler(entryService *service.EntryService) *EntryHandler {
 func (h *EntryHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/entries", h.GetEntries)
 	r.Post("/entries", h.CreateEntry)
+	r.Delete("/entries", h.BulkDeleteEntries)
 	r.Get("/entries/search", h.SearchEntries)
 	r.Get("/entries/{id}", h.GetEntry)
 	r.Put("/entries/{id}", h.UpdateEntry)
@@ -440,6 +442,58 @@ func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.WriteHeader(http.StatusOK)
 	w.Write(img.ImageData)
+}
+
+type bulkDeleteRequest struct {
+	IDs []string `json:"ids"`
+}
+
+func (h *EntryHandler) BulkDeleteEntries(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		return
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		return
+	}
+
+	var req bulkDeleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		respondWithError(w, http.StatusBadRequest, "No IDs provided", nil)
+		return
+	}
+
+	if len(req.IDs) > 100 {
+		respondWithError(w, http.StatusBadRequest, "Too many IDs: maximum 100", nil)
+		return
+	}
+
+	ids := make([]uuid.UUID, 0, len(req.IDs))
+	for _, idStr := range req.IDs {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Invalid entry ID: %s", idStr), err)
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	count, err := h.entryService.DeleteEntries(r.Context(), ids, uid)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to delete entries", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]int64{"deleted_count": count})
 }
 
 func (h *EntryHandler) SearchEntries(w http.ResponseWriter, r *http.Request) {
