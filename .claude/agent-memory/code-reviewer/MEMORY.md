@@ -159,8 +159,25 @@
 - **[bug] add-entries MCP tool score out-of-range silently clamped to 0 instead of returning an error** — seen 1 time
   - Last seen: mcp_protocol_handler.go:234-237 (score < 0 || score > 3 is silently reset to 0; entryService.CreateEntry will always receive a valid score and never return ErrInvalidScore; client receives a 200 with the clamped value, not a validation error)
 
-- **[bug] down migration 011 leaves the DEFAULT '{}' in place after dropping NOT NULL** — seen 1 time
+- **[bug] down migration 011 leaves the DEFAULT '{}' in place after dropping NOT NULL** — seen 1 time (FIXED)
   - Last seen: migrations/011_fix_additional_fields_not_null.down.sql:1 (only drops NOT NULL constraint; the DEFAULT '{}'::jsonb set in the up migration remains, making the column NOT NULL-compatible again without the constraint; functionally harmless but the down does not fully reverse the up)
+  - Fixed: DROP DEFAULT added as second statement in the down migration
+
+- **[bug] add-entries MCP tool score out-of-range silently clamped to 0 instead of returning an error** — seen 1 time (FIXED)
+  - Last seen: mcp_protocol_handler.go:234-237 (score < 0 || score > 3 is silently reset to 0; entryService.CreateEntry will always receive a valid score and never return ErrInvalidScore; client receives a 200 with the clamped value, not a validation error)
+  - Fixed: now returns an error instead of clamping
 
 - **[code-smell] get-entry-types tool uses local struct types (fieldResult, typeResult) duplicating what a shared DTO would provide** — seen 1 time
   - Last seen: mcp_protocol_handler.go:116-140 (anonymous inner structs defined inside the closure; identical structure to what the type repository already returns; a shared projection in the service or handler package would remove duplication)
+
+- **[bug] find-entries fetches at most 100 entries from DB regardless of limit, then filters in-memory — silently truncates results** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:401 (GetEntriesByUserID called with hardcoded limit=100 and offset=0; name-filter applied client-side after; a user with >100 entries who searches by title may never see matching entries beyond page 1; the limit parameter applies to the already-filtered slice, but only up to the first 100 DB rows are ever considered)
+
+- **[bug] edit-entry UpdateEntry called with collectionID nil when entry has no collection — may wipe collection assignment** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:502-509 (collectionID starts as current.CollectionID, which can be nil; if no collection_id arg is provided the nil is passed through to UpdateEntry; whether this is safe depends on repository semantics, but the nil-pass-through is subtle and not documented)
+
+- **[code-smell] find-entries and add-entries both use hardcoded magic value 100 for DB fetch limit** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:401 (GetEntriesByUserID called with literal 100; same constant as maxAddEntriesBatch but not reused; a named constant would make the relationship explicit)
+
+- **[code-smell] get-collections tool uses a local collectionResult struct where mcpEntryResult pattern could be generalised** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:115-130 (collectionResult, fieldResult, typeResult all defined as closure-local anonymous structs; no shared DTO layer; pattern will keep growing as tools are added)
