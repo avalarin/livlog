@@ -23,6 +23,7 @@ type MCPProtocolHandler struct {
 	mcpService        *service.MCPService
 	collectionService *service.CollectionService
 	entryService      *service.EntryService
+	typeService       *service.TypeService
 	log               *zap.Logger
 }
 
@@ -30,12 +31,14 @@ func NewMCPProtocolHandler(
 	mcpService *service.MCPService,
 	collectionService *service.CollectionService,
 	entryService *service.EntryService,
+	typeService *service.TypeService,
 	log *zap.Logger,
 ) *MCPProtocolHandler {
 	return &MCPProtocolHandler{
 		mcpService:        mcpService,
 		collectionService: collectionService,
 		entryService:      entryService,
+		typeService:       typeService,
 		log:               log,
 	}
 }
@@ -100,16 +103,60 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})
 
+	// Register get-entry-types tool
+	getEntryTypesTool := mcp.NewTool("get-entry-types",
+		mcp.WithDescription("Get all available entry types (system-wide and user-defined). Call this before add-entries to pick the right type_id and know which additional_fields keys are supported for that type."),
+	)
+	mcpSrv.AddTool(getEntryTypesTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		types, err := h.typeService.GetAllTypes(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get entry types: %w", err)
+		}
+
+		type fieldResult struct {
+			Key   string `json:"key"`
+			Label string `json:"label"`
+			Type  string `json:"type"`
+		}
+		type typeResult struct {
+			ID     string        `json:"id"`
+			Name   string        `json:"name"`
+			Icon   string        `json:"icon"`
+			Fields []fieldResult `json:"fields"`
+		}
+
+		results := make([]typeResult, len(types))
+		for i, t := range types {
+			fields := make([]fieldResult, len(t.Fields))
+			for j, f := range t.Fields {
+				fields[j] = fieldResult{Key: f.Key, Label: f.Label, Type: f.Type}
+			}
+			results[i] = typeResult{
+				ID:     t.ID.String(),
+				Name:   t.Name,
+				Icon:   t.Icon,
+				Fields: fields,
+			}
+		}
+
+		jsonBytes, err := json.Marshal(results)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal entry types: %w", err)
+		}
+
+		return mcp.NewToolResultText(string(jsonBytes)), nil
+	})
+
 	// Register add-entries tool
 	addEntriesTool := mcp.NewTool("add-entries",
-		mcp.WithDescription("Add one or more entries to a collection (max 100 per call)"),
+		mcp.WithDescription("Add one or more entries to a collection (max 100 per call). Call get-entry-types first to pick a type_id and discover which additional_fields keys are available for that type."),
 		mcp.WithString("collection_id",
 			mcp.Required(),
 			mcp.Description("UUID of the collection to add entries to"),
 		),
 		mcp.WithArray("entries",
 			mcp.Required(),
-			mcp.Description(`Array of entries to add. Each entry: {"title": string (required), "description": string (optional), "score": 0-3 (optional, default 0), "date": "YYYY-MM-DD" (optional, default today)}`),
+			mcp.Description(`Array of entries to add. Each entry: {"title": string (required), "description": string (optional, defaults to title), "type_id": string UUID (required — use get-entry-types to find the right type), "score": 0-3 (optional, default 0), "date": "YYYY-MM-DD" (optional, default today), "additional_fields": {"key": "value"} (optional — keys come from the type's fields list returned by get-entry-types)}`),
 		),
 	)
 	mcpSrv.AddTool(addEntriesTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -143,10 +190,12 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		type entryInput struct {
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			Score       int    `json:"score"`
-			Date        string `json:"date"`
+			Title            string            `json:"title"`
+			Description      string            `json:"description"`
+			TypeID           string            `json:"type_id"`
+			Score            int               `json:"score"`
+			Date             string            `json:"date"`
+			AdditionalFields map[string]string `json:"additional_fields"`
 		}
 
 		var entries []entryInput
@@ -169,6 +218,14 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 				return nil, fmt.Errorf("each entry must have a title")
 			}
 
+			if e.TypeID == "" {
+				return nil, fmt.Errorf("each entry must have a type_id — call get-entry-types to find valid values")
+			}
+			typeUUID, err := uuid.Parse(e.TypeID)
+			if err != nil {
+				return nil, fmt.Errorf("invalid type_id %q: %w", e.TypeID, err)
+			}
+
 			description := e.Description
 			if description == "" {
 				description = e.Title
@@ -176,7 +233,7 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 			score := e.Score
 			if score < 0 || score > 3 {
-				score = 0
+				return nil, fmt.Errorf("invalid score %d for entry %q: must be 0-3", score, e.Title)
 			}
 
 			dateStr := e.Date
@@ -189,16 +246,21 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 				return nil, fmt.Errorf("invalid date format for entry %q, use YYYY-MM-DD", e.Title)
 			}
 
+			additionalFields := e.AdditionalFields
+			if additionalFields == nil {
+				additionalFields = map[string]string{}
+			}
+
 			entry, err := h.entryService.CreateEntry(
 				ctx,
 				userID,
 				&collectionUUID,
-				nil,
+				&typeUUID,
 				e.Title,
 				description,
 				score,
 				date,
-				nil,
+				additionalFields,
 				nil,
 				nil,
 			)

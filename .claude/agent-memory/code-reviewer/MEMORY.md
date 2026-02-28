@@ -153,5 +153,14 @@
 - **[bug] add-entries MCP tool does not declare entries parameter in tool schema** — seen 1 time
   - Last seen: mcp_protocol_handler.go:103-109 (mcp.NewTool("add-entries") only registers collection_id via mcp.WithString; the required entries array is never declared with mcp.WithArray or equivalent; AI clients that introspect the schema will not know entries is accepted and may omit it)
 
-- **[wrong-layer] MCPService holds raw publicHost string and re-implements URL construction** — seen 1 time
-  - Last seen: mcp_service.go:22-42 (service layer owns the http/https scheme logic that already lives in config.ServerConfig.PublicURL(); service should receive the fully-formed base URL, not a raw host string that it must interpret)
+- **[wrong-layer] MCPService holds raw publicHost string and re-implements URL construction** — seen 1 time (FIXED)
+  - Last seen: mcp_service.go:22-42 (service layer owned the http/https scheme logic; now receives cfg.Server.PublicURL() from main.go — fix applied)
+
+- **[bug] add-entries MCP tool score out-of-range silently clamped to 0 instead of returning an error** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:234-237 (score < 0 || score > 3 is silently reset to 0; entryService.CreateEntry will always receive a valid score and never return ErrInvalidScore; client receives a 200 with the clamped value, not a validation error)
+
+- **[bug] down migration 011 leaves the DEFAULT '{}' in place after dropping NOT NULL** — seen 1 time
+  - Last seen: migrations/011_fix_additional_fields_not_null.down.sql:1 (only drops NOT NULL constraint; the DEFAULT '{}'::jsonb set in the up migration remains, making the column NOT NULL-compatible again without the constraint; functionally harmless but the down does not fully reverse the up)
+
+- **[code-smell] get-entry-types tool uses local struct types (fieldResult, typeResult) duplicating what a shared DTO would provide** — seen 1 time
+  - Last seen: mcp_protocol_handler.go:116-140 (anonymous inner structs defined inside the closure; identical structure to what the type repository already returns; a shared projection in the service or handler package would remove duplication)

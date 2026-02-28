@@ -121,7 +121,7 @@ func main() {
 	typeHandler := handler.NewTypeHandler(typeService)
 	aiSearchHandler := handler.NewAISearchHandler(aiSearchService)
 	mcpHandler := handler.NewMCPHandler(mcpService)
-	mcpProtocolHandler := handler.NewMCPProtocolHandler(mcpService, collectionService, entryService, log)
+	mcpProtocolHandler := handler.NewMCPProtocolHandler(mcpService, collectionService, entryService, typeService, log)
 
 	// Setup router
 	r := chi.NewRouter()

@@ -80,28 +80,6 @@ func (r *MCPRepository) GetByUniqueCode(ctx context.Context, uniqueCode string) 
 	return &integration, nil
 }
 
-// Create creates a new MCP integration for a user.
-func (r *MCPRepository) Create(ctx context.Context, userID uuid.UUID, uniqueCode string) (*MCPIntegration, error) {
-	query := `
-		INSERT INTO mcp_integrations (user_id, unique_code)
-		VALUES ($1, $2)
-		RETURNING id, user_id, unique_code, created_at
-	`
-
-	var integration MCPIntegration
-	err := r.db.QueryRow(ctx, query, userID, uniqueCode).Scan(
-		&integration.ID,
-		&integration.UserID,
-		&integration.UniqueCode,
-		&integration.CreatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create mcp integration: %w", err)
-	}
-
-	return &integration, nil
-}
-
 // Upsert atomically creates or replaces the MCP integration for a user.
 func (r *MCPRepository) Upsert(ctx context.Context, userID uuid.UUID, uniqueCode string) (*MCPIntegration, error) {
 	query := `
