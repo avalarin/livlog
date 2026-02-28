@@ -603,7 +603,7 @@ struct ShareCollectionSheet: View {
         NavigationStack {
             Form {
                 Section("Email Address") {
-                    TextField("colleague@example.com", text: $email)
+                    TextField("\("friend@example.com")", text: $email)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
@@ -678,4 +678,10 @@ struct ShareCollectionSheet: View {
 
 #Preview {
     CollectionsView()
+}
+
+#Preview("Share Collection") {
+    NavigationStack {
+        ShareCollectionSheet(collection: CollectionModel(id: "", name: "Preview", icon: ""))
+    }
 }
