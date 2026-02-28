@@ -30,6 +30,7 @@ func (h *CollectionHandler) RegisterRoutes(r chi.Router) {
 	r.Delete("/collections/{id}", h.DeleteCollection)
 	r.Get("/collections/{id}/members", h.GetMembers)
 	r.Post("/collections/{id}/shares", h.AddShare)
+	r.Patch("/collections/{id}/shares/{userID}", h.UpdateShare)
 	r.Delete("/collections/{id}/shares/{userID}", h.RemoveShare)
 }
 
@@ -60,6 +61,10 @@ type memberResponse struct {
 type addShareRequest struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
+}
+
+type updateShareRequest struct {
+	Role string `json:"role"`
 }
 
 func (h *CollectionHandler) GetCollections(w http.ResponseWriter, r *http.Request) {
@@ -367,6 +372,65 @@ func (h *CollectionHandler) AddShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusCreated, map[string]string{"message": "User added to collection"})
+}
+
+func (h *CollectionHandler) UpdateShare(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		return
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		return
+	}
+
+	collectionID := chi.URLParam(r, "id")
+	cid, err := uuid.Parse(collectionID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		return
+	}
+
+	targetUserIDStr := chi.URLParam(r, "userID")
+	targetUID, err := uuid.Parse(targetUserIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid target user ID", err)
+		return
+	}
+
+	var req updateShareRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	if req.Role != "owner" && req.Role != "write" && req.Role != "read" {
+		respondWithError(w, http.StatusBadRequest, "Invalid role: must be 'owner', 'write', or 'read'", nil)
+		return
+	}
+
+	err = h.collectionService.UpdateShare(r.Context(), cid, uid, targetUID, req.Role)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			respondWithError(w, http.StatusNotFound, "Collection or membership not found", err)
+			return
+		}
+		if errors.Is(err, service.ErrNotCollectionOwner) {
+			respondWithError(w, http.StatusForbidden, err.Error(), err)
+			return
+		}
+		if errors.Is(err, service.ErrLastOwner) {
+			respondWithError(w, http.StatusConflict, err.Error(), err)
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, "Failed to update share", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Permission updated"})
 }
 
 func (h *CollectionHandler) RemoveShare(w http.ResponseWriter, r *http.Request) {

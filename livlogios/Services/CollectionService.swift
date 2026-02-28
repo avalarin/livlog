@@ -129,6 +129,23 @@ actor CollectionService {
         )
     }
 
+    // MARK: - Update Share
+
+    func updateShare(collectionID: String, userID: String, role: CollectionRole) async throws {
+        struct Request: Codable {
+            let role: String
+        }
+
+        let request = Request(role: role.rawValue)
+        let bodyData = try encoder.encode(request)
+
+        _ = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(collectionID)/shares/\(userID)",
+            method: "PATCH",
+            body: bodyData
+        )
+    }
+
     // MARK: - Remove Share
 
     func removeShare(collectionID: String, userID: String) async throws {

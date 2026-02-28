@@ -334,6 +334,63 @@ func (r *CollectionRepository) RemoveCollectionShare(
 	return tx.Commit(ctx)
 }
 
+// UpdateCollectionShare changes a user's permission level in a collection.
+// Returns ErrLastOwner if trying to demote the last owner.
+// Returns ErrCollectionNotFound if the membership does not exist.
+func (r *CollectionRepository) UpdateCollectionShare(
+	ctx context.Context,
+	collectionID, userID uuid.UUID,
+	newRole string,
+) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Lock the target row to prevent concurrent updates racing.
+	var targetRole string
+	err = tx.QueryRow(ctx,
+		`SELECT permission_level FROM collection_shares
+		 WHERE collection_id = $1 AND shared_with_user_id = $2
+		 FOR UPDATE`,
+		collectionID, userID,
+	).Scan(&targetRole)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrCollectionNotFound
+		}
+		return fmt.Errorf("failed to get target role: %w", err)
+	}
+
+	// If demoting an owner, ensure at least one other owner remains.
+	if targetRole == "owner" && newRole != "owner" {
+		var ownerCount int
+		err = tx.QueryRow(ctx,
+			`SELECT COUNT(*) FROM collection_shares
+			 WHERE collection_id = $1 AND permission_level = 'owner'`,
+			collectionID,
+		).Scan(&ownerCount)
+		if err != nil {
+			return fmt.Errorf("failed to count owners: %w", err)
+		}
+		if ownerCount <= 1 {
+			return ErrLastOwner
+		}
+	}
+
+	_, err = tx.Exec(ctx,
+		`UPDATE collection_shares SET permission_level = $3
+		 WHERE collection_id = $1 AND shared_with_user_id = $2`,
+		collectionID, userID, newRole,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update collection share: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
 // UpdateCollection updates a collection's name and/or icon.
 func (r *CollectionRepository) UpdateCollection(
 	ctx context.Context,

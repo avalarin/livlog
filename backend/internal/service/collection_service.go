@@ -191,6 +191,27 @@ func (s *CollectionService) RemoveShare(
 	return s.collectionRepo.RemoveCollectionShare(ctx, collectionID, targetUserID)
 }
 
+// UpdateShare changes a user's permission level in a collection. Only owners may update.
+func (s *CollectionService) UpdateShare(
+	ctx context.Context,
+	collectionID, requesterID, targetUserID uuid.UUID,
+	newRole string,
+) error {
+	// Verify requester is owner
+	requesterRole, err := s.collectionRepo.GetUserRole(ctx, collectionID, requesterID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			return repository.ErrCollectionNotFound
+		}
+		return fmt.Errorf("failed to get user role: %w", err)
+	}
+	if requesterRole != "owner" {
+		return ErrNotCollectionOwner
+	}
+
+	return s.collectionRepo.UpdateCollectionShare(ctx, collectionID, targetUserID, newRole)
+}
+
 // CreateDefaultCollections creates default collections if user has none
 func (s *CollectionService) CreateDefaultCollections(
 	ctx context.Context,

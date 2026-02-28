@@ -241,3 +241,24 @@
 
 - **[bug] coalesceStringPtr display-name fallback leaks email as display name** — seen 1 time
   - Last seen: auth_service.go:278 — coalesceStringPtr(user.DisplayName, user.Email) returns the email pointer directly as DisplayName; the caller (mapUserToResponse) sets DisplayName = email, causing the email string to appear wherever display names are rendered (e.g. GetCollectionMembers.display_name is now always non-nil, making the iOS empty-displayName fallback in CollectionsView:468 dead code)
+
+- **[bug] Edit sheet blank when entry.collectionID is nil — FIXED** — seen 4 times (FIXED)
+  - Last seen: EntryDetailView.swift:210-214 — sheet now correctly binds to `collection` State; `getCollection` is fetched in loadEntry(); edit button disabled while collection == nil; blank-sheet bug resolved
+
+- **[wrong-layer] Placeholder CollectionModel with fake data constructed in view layer — FIXED** — seen 3 times (FIXED)
+  - Last seen: EntryDetailView.swift:211 — real CollectionModel now passed to AddEntryView after fetching via CollectionService.getCollection
+
+- **[bug] getCollection network call runs serially after loadImages in loadEntry — extra latency** — seen 1 time
+  - Last seen: EntryDetailView.swift:257-262 — getCollection is awaited after loadImages finishes; both are independent and could run concurrently via async let or TaskGroup, causing unnecessary sequential network round-trips
+
+- **[bug] Edit button disabled but Delete is still accessible when collection == nil** — seen 1 time
+  - Last seen: EntryDetailView.swift:192-202 — pencil button is disabled when collection == nil, but the Delete menu item inside the same ToolbarItem is not; user with canWrite role can delete an entry whose collection failed to load
+
+- **[code-smell] isEmailValid uses trivial string matching that can accept invalid addresses** — seen 1 time
+  - Last seen: CollectionsView.swift:587 — email.contains("@") && email.contains(".") accepts strings like "@." or "a@b." or "@.com"; fine for a lightweight guard but not a real validation; no localized feedback to user
+
+- **[bug] memberCount - 1 can go negative when memberCount is 0 from backend** — seen 1 time
+  - Last seen: CollectionsView.swift:96 — `let otherMembers = collection.memberCount - 1` uses server-supplied memberCount without clamping; if backend ever returns 0, otherMembers == -1 and the message reads "-1 other members"
+
+- **[code-smell] getCollection fetched unconditionally on every loadEntry refresh, including post-edit dismiss** — seen 1 time
+  - Last seen: EntryDetailView.swift:260-262 — after editing an entry the sheet dismisses and calls loadEntry(); this re-fetches getCollection even though collection data did not change, adding a redundant network call on every edit

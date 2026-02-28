@@ -200,6 +200,7 @@ struct EntryDetailView: View {
                                 } label: {
                                     Image(systemName: "ellipsis.circle")
                                 }
+                                .disabled(collection == nil)
                             }
                         }
                     }
@@ -255,11 +256,13 @@ struct EntryDetailView: View {
             }
 
             if let entry = entry {
-                images = await loadImages(imageIDs: entry.images)
-
-                if let collectionID = entry.collectionID {
-                    collection = try await CollectionService.shared.getCollection(id: collectionID)
-                }
+                async let loadedImages = loadImages(imageIDs: entry.images)
+                async let loadedCollection: CollectionModel? = {
+                    guard let collectionID = entry.collectionID else { return nil }
+                    return try await CollectionService.shared.getCollection(id: collectionID)
+                }()
+                images = await loadedImages
+                collection = try await loadedCollection
             }
         } catch {
             errorMessage = "Failed to load entry: \(error.localizedDescription)"

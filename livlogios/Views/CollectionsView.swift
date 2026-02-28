@@ -87,7 +87,9 @@ struct CollectionsView: View {
                     }
             }
             .sheet(item: $sharingCollection) { collection in
-                ShareCollectionSheet(collection: collection)
+                ShareCollectionSheet(collection: collection) {
+                    Task { await loadData() }
+                }
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
@@ -105,7 +107,7 @@ struct CollectionsView: View {
                 }
             } message: {
                 if let collection = collectionToDelete {
-                    let otherMembers = collection.memberCount - 1
+                    let otherMembers = max(0, collection.memberCount - 1)
                     if otherMembers > 0 {
                         Text("Leave \"\(collection.name)\"? The collection will remain accessible to \(otherMembers) other member\(otherMembers == 1 ? "" : "s").")
                     } else {
@@ -238,12 +240,12 @@ struct CollectionRow: View {
                 Label("Leave", systemImage: "trash")
             }
 
-            Button(action: onEdit) {
-                Label("Edit", systemImage: "pencil")
-            }
-            .tint(.orange)
-
             if collection.myRole.canEdit {
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .tint(.orange)
+
                 Button(action: onShare) {
                     Label("Share", systemImage: "person.2")
                 }
@@ -251,11 +253,11 @@ struct CollectionRow: View {
             }
         }
         .contextMenu {
-            Button(action: onEdit) {
-                Label("Edit", systemImage: "pencil")
-            }
-
             if collection.myRole.canEdit {
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil")
+                }
+
                 Button(action: onShare) {
                     Label("Share", systemImage: "person.badge.plus")
                 }
@@ -297,8 +299,7 @@ struct AddEditCollectionView: View {
     // Members section state (edit mode only)
     @State private var members: [CollectionMember] = []
     @State private var isLoadingMembers = false
-    @State private var memberToRemove: CollectionMember?
-    @State private var showingRemoveMemberAlert = false
+    @State private var selectedMember: CollectionMember?
     @State private var showingAddMember = false
 
     private let emojiOptions = [
@@ -435,21 +436,13 @@ struct AddEditCollectionView: View {
                     }
                 }
             }
-            .alert("Remove Member", isPresented: $showingRemoveMemberAlert) {
-                Button("Cancel", role: .cancel) {
-                    memberToRemove = nil
-                }
-                Button("Remove", role: .destructive) {
-                    if let member = memberToRemove, let collection = editingCollection {
+            .sheet(item: $selectedMember) { member in
+                if let collection = editingCollection {
+                    EditMemberSheet(collection: collection, member: member) {
                         Task {
-                            await removeMember(member, collectionID: collection.id)
+                            await loadMembers(collectionID: collection.id)
                         }
                     }
-                }
-            } message: {
-                if let member = memberToRemove {
-                    let name = member.displayName ?? member.email ?? member.userId
-                    Text("Remove \"\(name)\" from this collection?")
                 }
             }
             .alert("Error", isPresented: $showError) {
@@ -474,7 +467,10 @@ struct AddEditCollectionView: View {
                     Spacer()
                 }
             } else {
+                let currentUserID = appState.currentUser?.id.uuidString.lowercased()
                 ForEach(members) { member in
+                    let isSelf = member.userId.lowercased() == currentUserID
+                    let isTappable = isOwner && !isSelf
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             if let displayName = member.displayName, !displayName.isEmpty {
@@ -507,20 +503,19 @@ struct AddEditCollectionView: View {
                             .foregroundStyle(roleBadgeColor(member.role))
                             .clipShape(Capsule())
 
-                        let currentUserID = appState.currentUser?.id.uuidString.lowercased()
-                        if member.userId.lowercased() != currentUserID {
-                            Button {
-                                memberToRemove = member
-                                showingRemoveMemberAlert = true
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
-                                    .font(.subheadline)
-                            }
-                            .buttonStyle(.plain)
+                        if isTappable {
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
                         }
                     }
                     .padding(.vertical, 2)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if isTappable {
+                            selectedMember = member
+                        }
+                    }
                 }
 
                 Button {
@@ -549,17 +544,6 @@ struct AddEditCollectionView: View {
             showError = true
         }
         isLoadingMembers = false
-    }
-
-    private func removeMember(_ member: CollectionMember, collectionID: String) async {
-        do {
-            try await CollectionService.shared.removeShare(collectionID: collectionID, userID: member.userId)
-            await loadMembers(collectionID: collectionID)
-        } catch {
-            errorMessage = "Failed to remove member: \(error.localizedDescription)"
-            showError = true
-        }
-        memberToRemove = nil
     }
 
     private func saveCollection() async {
@@ -596,14 +580,15 @@ struct ShareCollectionSheet: View {
     @State private var showError = false
 
     private var isEmailValid: Bool {
-        email.contains("@") && email.contains(".")
+        let pattern = #"^[^@\s]+@[^@\s]+\.[^@\s]+$"#
+        return email.range(of: pattern, options: .regularExpression) != nil
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Email Address") {
-                    TextField("\("friend@example.com")", text: $email)
+                    TextField("friend@example.com", text: $email)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
@@ -673,6 +658,139 @@ struct ShareCollectionSheet: View {
             showError = true
         }
         isSharing = false
+    }
+}
+
+struct EditMemberSheet: View {
+    let collection: CollectionModel
+    let member: CollectionMember
+    var onDone: (() -> Void)? = nil
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var role: CollectionRole
+    @State private var isSaving = false
+    @State private var isRevoking = false
+    @State private var showRevokeConfirmation = false
+    @State private var errorMessage: String?
+    @State private var showError = false
+
+    init(collection: CollectionModel, member: CollectionMember, onDone: (() -> Void)? = nil) {
+        self.collection = collection
+        self.member = member
+        self.onDone = onDone
+        _role = State(initialValue: member.role)
+    }
+
+    private var hasChanges: Bool {
+        role != member.role
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Member") {
+                    if let displayName = member.displayName, !displayName.isEmpty {
+                        LabeledContent("Name", value: displayName)
+                    }
+                    if let email = member.email {
+                        LabeledContent("Email", value: email)
+                    }
+                }
+
+                Section("Permission") {
+                    Picker("Role", selection: $role) {
+                        Text("Reader (read only)").tag(CollectionRole.read)
+                        Text("Writer (can add entries)").tag(CollectionRole.write)
+                        Text("Owner (full control)").tag(CollectionRole.owner)
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        showRevokeConfirmation = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isRevoking {
+                                ProgressView()
+                            } else {
+                                Label("Revoke Access", systemImage: "person.badge.minus")
+                            }
+                            Spacer()
+                        }
+                    }
+                    .disabled(isSaving || isRevoking)
+                }
+            }
+            .navigationTitle("Edit Member")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        Task { await saveRole() }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                    .disabled(!hasChanges || isSaving || isRevoking)
+                }
+            }
+            .alert("Revoke Access", isPresented: $showRevokeConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Revoke", role: .destructive) {
+                    Task { await revokeAccess() }
+                }
+            } message: {
+                let identifier = member.email ?? member.userId
+                Text("Are you sure you want to remove \"\(collection.name)\" from \(identifier)?")
+            }
+            .alert("Error", isPresented: $showError) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                if let errorMessage { Text(errorMessage) }
+            }
+        }
+    }
+
+    private func saveRole() async {
+        isSaving = true
+        do {
+            try await CollectionService.shared.updateShare(
+                collectionID: collection.id,
+                userID: member.userId,
+                role: role
+            )
+            onDone?()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+        isSaving = false
+    }
+
+    private func revokeAccess() async {
+        isRevoking = true
+        do {
+            try await CollectionService.shared.removeShare(
+                collectionID: collection.id,
+                userID: member.userId
+            )
+            onDone?()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+        isRevoking = false
     }
 }
 
