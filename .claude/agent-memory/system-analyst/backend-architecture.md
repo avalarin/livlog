@@ -28,7 +28,7 @@ Routes registered in `cmd/server/main.go`:
 ## Auth Flow
 
 - JWT RS256 tokens (private/public key PEM files)
-- `middleware.AuthMiddleware` in `/Users/avprokopev/Projects/livlogios-ag2/backend/internal/middleware/auth.go`:
+- `middleware.AuthMiddleware` in `backend/internal/middleware/auth.go`:
   - Reads `Authorization: Bearer <token>`
   - Validates via `jwtService.ValidateAccessToken()`
   - Stores `claims.UserID` (string UUID) in `ctx` under plain string key `"userID"`
@@ -36,7 +36,7 @@ Routes registered in `cmd/server/main.go`:
 
 ## Database Schema
 
-Migration files in `/Users/avprokopev/Projects/livlogios-ag2/backend/migrations/`
+Migration files in `backend/migrations/`
 
 ### users (001)
 - id, email, email_verified, display_name, created_at, updated_at, deleted_at (soft delete)
@@ -69,16 +69,16 @@ Migration files in `/Users/avprokopev/Projects/livlogios-ag2/backend/migrations/
 
 ## Collection Layer
 
-Handler: `/Users/avprokopev/Projects/livlogios-ag2/backend/internal/handler/collection_handler.go`
+Handler: `backend/internal/handler/collection_handler.go`
 - Routes: GET/POST /collections, POST /collections/default, GET/PUT/DELETE /collections/{id}
 - Ownership check: service fetches collection, compares collection.UserID == callerUID
 
-Service: `/Users/avprokopev/Projects/livlogios-ag2/backend/internal/service/collection_service.go`
+Service: `backend/internal/service/collection_service.go`
 - Validates name (1-50 chars) and icon (1-20 chars)
 - GetCollectionByID returns ErrCollectionNotFound if user doesn't own it (ownership enforcement)
 - No sharing logic exists yet
 
-Repository: `/Users/avprokopev/Projects/livlogios-ag2/backend/internal/repository/collection_repository.go`
+Repository: `backend/internal/repository/collection_repository.go`
 - Collection struct: ID, UserID, Name, Icon, EntryCount, CreatedAt, UpdatedAt
 - GetCollectionsByUserID: filters strictly by user_id — shared collections NOT returned
 - No queries against collection_shares table
