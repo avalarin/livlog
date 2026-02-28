@@ -64,6 +64,8 @@ struct ContentView: View {
             selectedIDs.removeAll()
         } catch is CancellationError {
             return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = "Failed to load data: \(error.localizedDescription)"
             showingError = true
@@ -429,6 +431,7 @@ struct EntryCard: View {
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
     @State private var coverImage: UIImage?
+    @State private var isImageLoading = false
 
     private var metadataLine: String {
         let line = item.additionalFields.values.joined(separator: "・")
@@ -451,8 +454,9 @@ struct EntryCard: View {
                 .overlay(
                     Text(entryType?.icon ?? "📝")
                         .font(.system(size: 48))
-                        .opacity(0.5)
+                        .opacity(coverImage == nil && isImageLoading ? 0 : 0.5)
                 )
+                .shimmerLoading(coverImage == nil && isImageLoading)
 
                 if let coverImage {
                     Image(uiImage: coverImage)
@@ -543,19 +547,18 @@ struct EntryCard: View {
         } message: {
             Text("Are you sure you want to delete \"\(item.title)\"?")
         }
-        .task {
+        .task(id: item.id) {
             await loadCoverImage()
         }
     }
 
     private func loadCoverImage() async {
-        let cover = item.images.first { $0.isCover }
-            ?? item.images.first
+        let cover = item.images.first { $0.isCover } ?? item.images.first
         guard let cover else { return }
-        guard let data = try? await EntryService.shared.getImage(
-            imageID: cover.id
-        ) else { return }
-        coverImage = UIImage(data: data)
+        isImageLoading = true
+        defer { isImageLoading = false }
+        guard let image = try? await ImageLoaderService.shared.load(id: cover.id, hash: cover.hash) else { return }
+        coverImage = image
     }
 }
 
@@ -570,6 +573,7 @@ struct EntryListRow: View {
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
     @State private var coverImage: UIImage?
+    @State private var isImageLoading = false
 
     private var metadataLine: String {
         if item.description.isEmpty {
@@ -590,11 +594,14 @@ struct EntryListRow: View {
             } else {
                 Text(entryType?.icon ?? "📝")
                     .font(.system(size: 40))
+                    .opacity(isImageLoading ? 0 : 1)
                     .frame(width: 60, height: 60)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
                             .fill(Color.accentColor.opacity(0.1))
                     )
+                    .shimmerLoading(isImageLoading)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -660,19 +667,18 @@ struct EntryListRow: View {
         } message: {
             Text("Are you sure you want to delete \"\(item.title)\"?")
         }
-        .task {
+        .task(id: item.id) {
             await loadCoverImage()
         }
     }
 
     private func loadCoverImage() async {
-        let cover = item.images.first { $0.isCover }
-            ?? item.images.first
+        let cover = item.images.first { $0.isCover } ?? item.images.first
         guard let cover else { return }
-        guard let data = try? await EntryService.shared.getImage(
-            imageID: cover.id
-        ) else { return }
-        coverImage = UIImage(data: data)
+        isImageLoading = true
+        defer { isImageLoading = false }
+        guard let image = try? await ImageLoaderService.shared.load(id: cover.id, hash: cover.hash) else { return }
+        coverImage = image
     }
 }
 
@@ -739,6 +745,41 @@ extension View {
             self.glassEffect(in: shape)
         } else {
             self.background(.thinMaterial, in: shape)
+        }
+    }
+
+    @ViewBuilder
+    func shimmerLoading(_ isLoading: Bool) -> some View {
+        if isLoading {
+            modifier(ShimmerModifier())
+        } else {
+            self
+        }
+    }
+}
+
+// MARK: - ShimmerModifier
+
+struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = -1
+
+    func body(content: Content) -> some View {
+        content.overlay(
+            GeometryReader { geo in
+                LinearGradient(
+                    colors: [.clear, .white.opacity(0.5), .clear],
+                    startPoint: .init(x: phase, y: 0.5),
+                    endPoint: .init(x: phase + 0.5, y: 0.5)
+                )
+                .frame(width: geo.size.width * 2)
+                .offset(x: -geo.size.width)
+            }
+            .clipped()
+        )
+        .onAppear {
+            withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
+                phase = 1.5
+            }
         }
     }
 }

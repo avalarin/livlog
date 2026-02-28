@@ -11,6 +11,18 @@
 
 **Generic `View` extensions belong in `Extensions/`** — utilities like `View.if(_:transform:)` must live in a dedicated file (e.g. `Extensions/View+Conditional.swift`), never inside a feature view file. Defining app-wide extensions in `ContentView.swift` or similar makes them invisible to other views and invites duplication.
 
+**Always use `defer { isLoading = false }` in async load functions** — placing `isLoading = false` at the end of a function is fragile: if a `catch` clause adds a `return`, the flag sticks at `true` forever. Pattern to use in every view load function:
+```swift
+func loadData() async {
+    isLoading = true
+    defer { isLoading = false }
+    do { ... }
+    catch is CancellationError { return }
+    catch let e as URLError where e.code == .cancelled { return }
+    catch { errorMessage = ...; showError = true }
+}
+```
+
 ## Swift async/await patterns
 
 **Cancellation detection in catch blocks** — `Task.isCancelled` is unreliable inside a `catch` block because the task may have already resumed by the time execution reaches `catch`. Instead:
@@ -79,5 +91,8 @@ All readers must also use the same typed constant, not a raw string.
 - Pattern: `if strings.Contains(msg, "23505") || strings.Contains(msg, "uq_my_constraint") { return ErrAlreadyX }`
 
 **Transactional collection creation** — when creating a collection also needs a share row:
-- Use `tx, err := r.db.Begin(ctx)` + `defer tx.Rollback(ctx)` + `tx.Commit(ctx)` in repo
+- Use `tx, err := r.db.Begin(ctx)` + `defer func() { _ = tx.Rollback(ctx) }()` + `tx.Commit(ctx)` in repo
 - Insert collection, insert share row in same tx, return assembled struct with hardcoded role/count
+- Note: `defer tx.Rollback(ctx)` (without `_ =`) triggers `errcheck` lint error — always use the func wrapper
+
+**Xcode PBXFileSystemSynchronizedRootGroup** — project uses filesystem-synchronized groups; new Swift files placed in the correct folder are automatically included in the target without modifying `project.pbxproj`.

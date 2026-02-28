@@ -58,7 +58,7 @@ func (r *CollectionRepository) CreateCollection(
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	insertQuery := `
 		INSERT INTO collections (user_id, name, icon)
@@ -291,7 +291,7 @@ func (r *CollectionRepository) RemoveCollectionShare(
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Lock the target row to prevent concurrent removals from racing.
 	var targetRole string
@@ -346,7 +346,7 @@ func (r *CollectionRepository) UpdateCollectionShare(
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Lock the target row to prevent concurrent updates racing.
 	var targetRole string

@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +46,7 @@ type ImageMeta struct {
 	ID       uuid.UUID `json:"id"`
 	IsCover  bool      `json:"is_cover"`
 	Position int       `json:"position"`
+	Hash     string    `json:"hash"`
 }
 
 type EntryRepository struct {
@@ -317,11 +320,13 @@ func (r *EntryRepository) SaveEntryImages(
 	// Insert new images
 	if len(images) > 0 {
 		insertQuery := `
-			INSERT INTO entry_images (entry_id, image_data, is_cover, position)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO entry_images (entry_id, image_data, is_cover, position, hash)
+			VALUES ($1, $2, $3, $4, $5)
 		`
 		for _, img := range images {
-			_, err = tx.Exec(ctx, insertQuery, entryID, img.ImageData, img.IsCover, img.Position)
+			sum := sha256.Sum256(img.ImageData)
+			hashHex := hex.EncodeToString(sum[:])
+			_, err = tx.Exec(ctx, insertQuery, entryID, img.ImageData, img.IsCover, img.Position, hashHex)
 			if err != nil {
 				return fmt.Errorf("failed to insert image: %w", err)
 			}
@@ -383,7 +388,7 @@ func (r *EntryRepository) GetEntryImageMetas(
 	entryID uuid.UUID,
 ) ([]ImageMeta, error) {
 	query := `
-		SELECT id, is_cover, position FROM entry_images
+		SELECT id, is_cover, position, COALESCE(hash, '') FROM entry_images
 		WHERE entry_id = $1
 		ORDER BY position ASC
 	`
@@ -397,7 +402,7 @@ func (r *EntryRepository) GetEntryImageMetas(
 	var metas []ImageMeta
 	for rows.Next() {
 		var m ImageMeta
-		if err := rows.Scan(&m.ID, &m.IsCover, &m.Position); err != nil {
+		if err := rows.Scan(&m.ID, &m.IsCover, &m.Position, &m.Hash); err != nil {
 			return nil, fmt.Errorf("failed to scan image meta: %w", err)
 		}
 		metas = append(metas, m)
@@ -446,7 +451,7 @@ func (r *EntryRepository) GetImageMetasByEntryIDs(
 	}
 
 	query := `
-		SELECT entry_id, id, is_cover, position FROM entry_images
+		SELECT entry_id, id, is_cover, position, COALESCE(hash, '') FROM entry_images
 		WHERE entry_id = ANY($1)
 		ORDER BY entry_id, position ASC
 	`
@@ -461,7 +466,7 @@ func (r *EntryRepository) GetImageMetasByEntryIDs(
 	for rows.Next() {
 		var entryID uuid.UUID
 		var m ImageMeta
-		if err := rows.Scan(&entryID, &m.ID, &m.IsCover, &m.Position); err != nil {
+		if err := rows.Scan(&entryID, &m.ID, &m.IsCover, &m.Position, &m.Hash); err != nil {
 			return nil, fmt.Errorf("failed to scan: %w", err)
 		}
 		result[entryID] = append(result[entryID], m)
@@ -603,9 +608,11 @@ func (r *EntryRepository) CopySeedImagesToEntry(ctx context.Context, entryID uui
 		}
 
 		isCover := i == 0
+		sum := sha256.Sum256(data)
+		hashHex := hex.EncodeToString(sum[:])
 		_, err = tx.Exec(ctx,
-			`INSERT INTO entry_images (entry_id, image_data, is_cover, position) VALUES ($1, $2, $3, $4)`,
-			entryID, data, isCover, i,
+			`INSERT INTO entry_images (entry_id, image_data, is_cover, position, hash) VALUES ($1, $2, $3, $4, $5)`,
+			entryID, data, isCover, i, hashHex,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert entry image: %w", err)

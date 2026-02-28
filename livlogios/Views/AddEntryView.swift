@@ -355,6 +355,10 @@ struct AddEntryView: View {
 
                 selectedImages = await loadImages(imageIDs: entry.images)
             }
+        } catch is CancellationError {
+            // task cancelled (sheet dismissed before load finished)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // URLSession cancelled
         } catch {
             errorMessage = "Failed to load data: \(error.localizedDescription)"
             showError = true

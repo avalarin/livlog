@@ -19,6 +19,7 @@ type imageMetaResponse struct {
 	ID       string `json:"id"`
 	IsCover  bool   `json:"is_cover"`
 	Position int    `json:"position"`
+	Hash     string `json:"hash"`
 }
 
 type EntryHandler struct {
@@ -583,6 +584,7 @@ func mapEntryToResponse(e *repository.Entry, imageMetas []repository.ImageMeta) 
 			ID:       m.ID.String(),
 			IsCover:  m.IsCover,
 			Position: m.Position,
+			Hash:     m.Hash,
 		}
 	}
 

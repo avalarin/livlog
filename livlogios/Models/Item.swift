@@ -419,17 +419,20 @@ struct ImageMeta: Codable, Identifiable {
     let id: String
     let isCover: Bool
     let position: Int
+    let hash: String?
 
-    init(id: String, isCover: Bool, position: Int) {
+    init(id: String, isCover: Bool, position: Int, hash: String? = nil) {
         self.id = id
         self.isCover = isCover
         self.position = position
+        self.hash = hash
     }
 
     enum CodingKeys: String, CodingKey {
         case id
         case isCover = "is_cover"
         case position
+        case hash
     }
 }
 

@@ -23,32 +23,31 @@ struct CollectionsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if isLoading {
-                    ProgressView()
-                } else {
-                    List {
-                        ForEach(collections) { collection in
-                            NavigationLink {
-                                ContentView(collection: collection)
-                            } label: {
-                                CollectionRow(
-                                    collection: collection,
-                                    entryCount: collection.entryCount,
-                                    onEdit: { editingCollection = collection },
-                                    onShare: { sharingCollection = collection },
-                                    onDelete: {
-                                        collectionToDelete = collection
-                                        showingDeleteAlert = true
-                                    }
-                                )
+            List {
+                ForEach(collections) { collection in
+                    NavigationLink {
+                        ContentView(collection: collection)
+                    } label: {
+                        CollectionRow(
+                            collection: collection,
+                            entryCount: collection.entryCount,
+                            onEdit: { editingCollection = collection },
+                            onShare: { sharingCollection = collection },
+                            onDelete: {
+                                collectionToDelete = collection
+                                showingDeleteAlert = true
                             }
-                            .buttonStyle(.plain)
-                        }
+                        )
                     }
-                    .refreshable {
-                        await loadData()
-                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .refreshable {
+                await loadData()
+            }
+            .overlay {
+                if collections.isEmpty && isLoading {
+                    ProgressView()
                 }
             }
             .navigationTitle("My Collections")
@@ -155,13 +154,17 @@ struct CollectionsView: View {
 
     private func loadData() async {
         isLoading = true
+        defer { isLoading = false }
         do {
             collections = try await CollectionService.shared.getCollections()
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
             showError = true
         }
-        isLoading = false
     }
 
     private func createDefaultCollections() async {

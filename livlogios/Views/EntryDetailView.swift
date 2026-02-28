@@ -181,27 +181,27 @@ struct EntryDetailView: View {
                 .ignoresSafeArea(edges: .top)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    if myRole.canWrite {
-                        ToolbarItem(placement: .primaryAction) {
-                            HStack(spacing: 12) {
+                    ToolbarItem(placement: .primaryAction) {
+                        HStack(spacing: 12) {
+                            Menu {
+                                // TODO add share
+                                
                                 Button {
                                     showingEditSheet = true
                                 } label: {
-                                    Image(systemName: "pencil.circle")
+                                    Label("Edit", systemImage: "pencil")
                                 }
-                                .disabled(collection == nil)
-
-                                Menu {
-                                    Button(role: .destructive) {
-                                        showingDeleteAlert = true
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
+                                .disabled(collection == nil || !myRole.canWrite)
+                                
+                                Button(role: .destructive) {
+                                    showingDeleteAlert = true
                                 } label: {
-                                    Image(systemName: "ellipsis.circle")
+                                    Label("Delete", systemImage: "trash")
                                 }
-                                .disabled(collection == nil)
+                            } label: {
+                                Image(systemName: "ellipsis")
                             }
+                            .disabled(collection == nil || !myRole.canWrite)
                         }
                     }
                 }
@@ -264,6 +264,10 @@ struct EntryDetailView: View {
                 images = await loadedImages
                 collection = try await loadedCollection
             }
+        } catch is CancellationError {
+            // task cancelled (e.g. view disappeared)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // URLSession cancelled
         } catch {
             errorMessage = "Failed to load entry: \(error.localizedDescription)"
             showError = true
