@@ -33,6 +33,7 @@ struct SearchView: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
+                .allowsHitTesting(false)
 
                 contentView
             }
