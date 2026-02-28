@@ -442,7 +442,25 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 	// Register edit-entry tool
 	editEntryTool := mcp.NewTool("edit-entry",
-		mcp.WithDescription("Update an existing entry by ID. Only the fields you provide are changed; omitted fields keep their current values."),
+		mcp.WithDescription(`Update an existing entry by ID using patch semantics.
+
+PATCH RULES:
+- Top-level fields (title, description, type_id, collection_id, score, date): omit to keep current value, provide to replace it.
+- additional_fields: MERGED into the existing map — existing keys not mentioned are preserved. To remove a key use additional_fields_delete.
+
+EXAMPLES:
+
+1. Update score only:
+   {"id": "<uuid>", "score": 3}
+
+2. Correct a typo in the title and set the watch date:
+   {"id": "<uuid>", "title": "Inception", "date": "2024-03-15"}
+
+3. Add/update one additional field without touching others, and remove an outdated field:
+   {"id": "<uuid>", "additional_fields": {"Year": "2010"}, "additional_fields_delete": ["OldField"]}
+
+4. Remove the entry from its collection (un-assign):
+   {"id": "<uuid>", "collection_id_clear": true}`),
 		mcp.WithString("id",
 			mcp.Required(),
 			mcp.Description("UUID of the entry to edit"),
@@ -457,7 +475,10 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 			mcp.Description("New type UUID — use get-entry-types to find valid values"),
 		),
 		mcp.WithString("collection_id",
-			mcp.Description("New collection UUID to move the entry to"),
+			mcp.Description("New collection UUID to move the entry to. To remove the entry from all collections use collection_id_clear instead."),
+		),
+		mcp.WithBoolean("collection_id_clear",
+			mcp.Description("Set to true to remove the entry from its current collection. Takes precedence over collection_id."),
 		),
 		mcp.WithNumber("score",
 			mcp.Description("New score: 0, 1, 2, or 3"),
@@ -466,7 +487,10 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 			mcp.Description("New watch/read/play date in YYYY-MM-DD format"),
 		),
 		mcp.WithObject("additional_fields",
-			mcp.Description("Replacement map of additional fields — replaces all existing additional fields"),
+			mcp.Description("Key-value pairs to merge into the existing additional_fields map. Existing keys not listed here are preserved."),
+		),
+		mcp.WithArray("additional_fields_delete",
+			mcp.Description("List of additional_fields keys to remove. Applied after the merge of additional_fields."),
 		),
 	)
 	mcpSrv.AddTool(editEntryTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -488,7 +512,10 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 			return nil, fmt.Errorf("invalid id: %w", err)
 		}
 
-		// Fetch current state to apply patch
+		// Fetch current state to build the patch.
+		// Note: UpdateEntry re-fetches the entry internally for its ownership check,
+		// resulting in two DB reads per edit. This is safe but acknowledged as a known
+		// inefficiency — eliminating it would require a lower-level service method.
 		current, err := h.entryService.GetEntryByID(ctx, entryUUID, userID)
 		if err != nil {
 			if errors.Is(err, repository.ErrEntryNotFound) {
@@ -518,10 +545,12 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Preserve current value (including nil = "no collection") unless explicitly overridden.
-		// Passing nil to UpdateEntry is safe: the repo sets the column to NULL, which matches
-		// the current state when the entry already has no collection.
+		// collection_id_clear takes precedence: it sets collectionID to nil, which the repo
+		// stores as NULL — effectively removing the entry from any collection.
 		collectionID := current.CollectionID
-		if v, ok := args["collection_id"].(string); ok && v != "" {
+		if clear, _ := args["collection_id_clear"].(bool); clear {
+			collectionID = nil
+		} else if v, ok := args["collection_id"].(string); ok && v != "" {
 			parsed, err := uuid.Parse(v)
 			if err != nil {
 				return nil, fmt.Errorf("invalid collection_id: %w", err)
@@ -546,7 +575,13 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 			date = parsed
 		}
 
-		additionalFields := current.AdditionalFields
+		// Start from a copy of the current map so we don't mutate cached state.
+		additionalFields := make(map[string]string, len(current.AdditionalFields))
+		for k, v := range current.AdditionalFields {
+			additionalFields[k] = v
+		}
+
+		// Merge new keys into the copy — existing keys not mentioned are preserved.
 		if v, ok := args["additional_fields"]; ok {
 			afJSON, err := json.Marshal(v)
 			if err != nil {
@@ -556,10 +591,24 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 			if err := json.Unmarshal(afJSON, &af); err != nil {
 				return nil, fmt.Errorf("additional_fields must be a flat string-to-string map")
 			}
-			additionalFields = af
+			for k, val := range af {
+				additionalFields[k] = val
+			}
 		}
-		if additionalFields == nil {
-			additionalFields = map[string]string{}
+
+		// Delete keys listed in additional_fields_delete (applied after merge).
+		if v, ok := args["additional_fields_delete"]; ok {
+			deleteJSON, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("failed to process additional_fields_delete: %w", err)
+			}
+			var deleteKeys []string
+			if err := json.Unmarshal(deleteJSON, &deleteKeys); err != nil {
+				return nil, fmt.Errorf("additional_fields_delete must be an array of strings")
+			}
+			for _, k := range deleteKeys {
+				delete(additionalFields, k)
+			}
 		}
 
 		updated, err := h.entryService.UpdateEntry(
