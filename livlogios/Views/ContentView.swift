@@ -36,6 +36,7 @@ struct ContentView: View {
     @State private var items: [EntryModel]
     @State private var types: [EntryTypeModel] = []
     @State private var isLoading = false
+    @State private var hasLoaded = false
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var containerWidth: CGFloat = 0
@@ -54,7 +55,7 @@ struct ContentView: View {
     func loadData() async {
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer { isLoading = false; hasLoaded = true }
 
         do {
             async let entriesTask = EntryService.shared.getEntries(collectionID: collection.id)
@@ -194,10 +195,12 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            if items.isEmpty && !isLoading {
-                EmptyStateView(showingAddEntry: $showingAddEntry, canWrite: collection.myRole.canWrite)
-            } else {
-                ScrollView {
+            ScrollView {
+                if items.isEmpty && hasLoaded {
+                    EmptyStateView(showingAddEntry: $showingAddEntry, canWrite: collection.myRole.canWrite)
+                        .frame(maxWidth: .infinity)
+                        .containerRelativeFrame(.vertical, alignment: .center)
+                } else {
                     LazyVStack(spacing: 0) {
                         if viewMode == .grid {
                             LazyVGrid(columns: gridColumns, spacing: 12) {
@@ -282,31 +285,30 @@ struct ContentView: View {
                     } action: { width in
                         containerWidth = width
                     }
-                }
-                .safeAreaInset(edge: .bottom) {
-                    if !isSelectMode && collection.myRole.canWrite {
-                        HStack {
-                            Spacer()
-                                Button {
-                                    showingAddEntry = true
-                                } label: {
-                                    Image(systemName: "plus")
-                                        .font(.title2)
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(.white)
-                                        .frame(width: 48, height: 48)
-                                        .background(Color.accentColor)
-                                        .clipShape(Circle())
-                                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                             }
+            }
+            .refreshable {
+                await loadData()
+            }
+            .safeAreaInset(edge: .bottom) {
+                if !isSelectMode && collection.myRole.canWrite && hasLoaded {
+                    HStack {
+                        Spacer()
+                        Button {
+                            showingAddEntry = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                                .frame(width: 48, height: 48)
+                                .background(Color.accentColor)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
                     }
-                }
-
-                .refreshable {
-                    await loadData()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
             }
         }
@@ -348,7 +350,7 @@ struct ContentView: View {
             }
         }
         .task {
-            guard !isPreview else { return }
+           guard !isPreview else { return }
             await loadData()
         }
     }

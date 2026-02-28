@@ -388,7 +388,7 @@ func (r *EntryRepository) GetEntryImageMetas(
 	entryID uuid.UUID,
 ) ([]ImageMeta, error) {
 	query := `
-		SELECT id, is_cover, position, COALESCE(hash, '') FROM entry_images
+		SELECT id, is_cover, position, hash FROM entry_images
 		WHERE entry_id = $1
 		ORDER BY position ASC
 	`
@@ -433,7 +433,7 @@ func (r *EntryRepository) GetImageByID(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("image not found")
+			return nil, ErrEntryNotFound
 		}
 		return nil, fmt.Errorf("failed to get image: %w", err)
 	}
@@ -451,7 +451,7 @@ func (r *EntryRepository) GetImageMetasByEntryIDs(
 	}
 
 	query := `
-		SELECT entry_id, id, is_cover, position, COALESCE(hash, '') FROM entry_images
+		SELECT entry_id, id, is_cover, position, hash FROM entry_images
 		WHERE entry_id = ANY($1)
 		ORDER BY entry_id, position ASC
 	`
@@ -604,7 +604,10 @@ func (r *EntryRepository) CopySeedImagesToEntry(ctx context.Context, entryID uui
 		var data []byte
 		err := tx.QueryRow(ctx, `SELECT image_data FROM seed_images WHERE id = $1`, seedID).Scan(&data)
 		if err != nil {
-			return fmt.Errorf("seed image %s not found: %w", seedID, err)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("seed image %s: %w", seedID, ErrSeedImageNotFound)
+			}
+			return fmt.Errorf("failed to fetch seed image %s: %w", seedID, err)
 		}
 
 		isCover := i == 0

@@ -8,15 +8,18 @@ import (
 	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type MCPHandler struct {
 	mcpService *service.MCPService
+	log        *zap.Logger
 }
 
-func NewMCPHandler(mcpService *service.MCPService) *MCPHandler {
+func NewMCPHandler(mcpService *service.MCPService, log *zap.Logger) *MCPHandler {
 	return &MCPHandler{
 		mcpService: mcpService,
+		log:        log,
 	}
 }
 
@@ -34,67 +37,67 @@ type mcpStatusResponse struct {
 func (h *MCPHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	status, err := h.mcpService.GetStatus(r.Context(), uid)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to get MCP status", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get MCP status", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, mapMCPStatusToResponse(status))
+	respondWithJSON(h.log, w, http.StatusOK, mapMCPStatusToResponse(status))
 }
 
 func (h *MCPHandler) Enable(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	status, err := h.mcpService.Enable(r.Context(), uid)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to enable MCP", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to enable MCP", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, mapMCPStatusToResponse(status))
+	respondWithJSON(h.log, w, http.StatusCreated, mapMCPStatusToResponse(status))
 }
 
 func (h *MCPHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	err = h.mcpService.Disable(r.Context(), uid)
 	if err != nil {
 		if errors.Is(err, repository.ErrMCPNotFound) {
-			respondWithError(w, http.StatusNotFound, "MCP integration not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "MCP integration not found", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to disable MCP", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to disable MCP", err)
 		return
 	}
 

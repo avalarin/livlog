@@ -9,15 +9,18 @@ import (
 	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type CollectionHandler struct {
 	collectionService *service.CollectionService
+	log               *zap.Logger
 }
 
-func NewCollectionHandler(collectionService *service.CollectionService) *CollectionHandler {
+func NewCollectionHandler(collectionService *service.CollectionService, log *zap.Logger) *CollectionHandler {
 	return &CollectionHandler{
 		collectionService: collectionService,
+		log:               log,
 	}
 }
 
@@ -70,19 +73,19 @@ type updateShareRequest struct {
 func (h *CollectionHandler) GetCollections(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collections, err := h.collectionService.GetCollectionsByUserID(r.Context(), uid)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to get collections", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get collections", err)
 		return
 	}
 
@@ -91,61 +94,61 @@ func (h *CollectionHandler) GetCollections(w http.ResponseWriter, r *http.Reques
 		response[i] = mapCollectionToResponse(c)
 	}
 
-	respondWithJSON(w, http.StatusOK, response)
+	respondWithJSON(h.log, w, http.StatusOK, response)
 }
 
 func (h *CollectionHandler) CreateCollection(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	var req createCollectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
 	collection, err := h.collectionService.CreateCollection(r.Context(), uid, req.Name, req.Icon)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCollectionName) || errors.Is(err, service.ErrInvalidIcon) {
-			respondWithError(w, http.StatusBadRequest, err.Error(), err)
+			respondWithError(h.log, w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to create collection", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to create collection", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, mapCollectionToResponse(collection))
+	respondWithJSON(h.log, w, http.StatusCreated, mapCollectionToResponse(collection))
 }
 
 func (h *CollectionHandler) CreateDefaultCollections(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collections, err := h.collectionService.CreateDefaultCollections(r.Context(), uid)
 	if err != nil {
 		if errors.Is(err, service.ErrAlreadyHasCollections) {
-			respondWithError(w, http.StatusBadRequest, "User already has collections", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "User already has collections", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to create default collections", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to create default collections", err)
 		return
 	}
 
@@ -154,153 +157,153 @@ func (h *CollectionHandler) CreateDefaultCollections(w http.ResponseWriter, r *h
 		response[i] = mapCollectionToResponse(c)
 	}
 
-	respondWithJSON(w, http.StatusCreated, response)
+	respondWithJSON(h.log, w, http.StatusCreated, response)
 }
 
 func (h *CollectionHandler) GetCollection(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collectionID := chi.URLParam(r, "id")
 	cid, err := uuid.Parse(collectionID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 		return
 	}
 
 	collection, err := h.collectionService.GetCollectionByID(r.Context(), cid, uid)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusNotFound, "Collection not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to get collection", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get collection", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, mapCollectionToResponse(collection))
+	respondWithJSON(h.log, w, http.StatusOK, mapCollectionToResponse(collection))
 }
 
 func (h *CollectionHandler) UpdateCollection(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collectionID := chi.URLParam(r, "id")
 	cid, err := uuid.Parse(collectionID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 		return
 	}
 
 	var req createCollectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
 	collection, err := h.collectionService.UpdateCollection(r.Context(), cid, uid, req.Name, req.Icon)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusNotFound, "Collection not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
 			return
 		}
 		if errors.Is(err, service.ErrNotCollectionOwner) {
-			respondWithError(w, http.StatusForbidden, err.Error(), err)
+			respondWithError(h.log, w, http.StatusForbidden, err.Error(), err)
 			return
 		}
 		if errors.Is(err, service.ErrInvalidCollectionName) || errors.Is(err, service.ErrInvalidIcon) {
-			respondWithError(w, http.StatusBadRequest, err.Error(), err)
+			respondWithError(h.log, w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to update collection", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to update collection", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, mapCollectionToResponse(collection))
+	respondWithJSON(h.log, w, http.StatusOK, mapCollectionToResponse(collection))
 }
 
 func (h *CollectionHandler) DeleteCollection(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collectionID := chi.URLParam(r, "id")
 	cid, err := uuid.Parse(collectionID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 		return
 	}
 
 	err = h.collectionService.DeleteCollection(r.Context(), cid, uid)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusNotFound, "Collection not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
 			return
 		}
 		if errors.Is(err, service.ErrLastOwner) {
-			respondWithError(w, http.StatusConflict, err.Error(), err)
+			respondWithError(h.log, w, http.StatusConflict, err.Error(), err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to leave collection", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to leave collection", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Collection deleted successfully"})
+	respondWithJSON(h.log, w, http.StatusOK, map[string]string{"message": "Collection deleted successfully"})
 }
 
 func (h *CollectionHandler) GetMembers(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collectionID := chi.URLParam(r, "id")
 	cid, err := uuid.Parse(collectionID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 		return
 	}
 
 	members, err := h.collectionService.GetMembers(r.Context(), cid, uid)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusNotFound, "Collection not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to get members", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get members", err)
 		return
 	}
 
@@ -314,171 +317,171 @@ func (h *CollectionHandler) GetMembers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondWithJSON(w, http.StatusOK, response)
+	respondWithJSON(h.log, w, http.StatusOK, response)
 }
 
 func (h *CollectionHandler) AddShare(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collectionID := chi.URLParam(r, "id")
 	cid, err := uuid.Parse(collectionID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 		return
 	}
 
 	var req addShareRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
 	// Validate role
 	if req.Role != "owner" && req.Role != "write" && req.Role != "read" {
-		respondWithError(w, http.StatusBadRequest, "Invalid role: must be 'owner', 'write', or 'read'", nil)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid role: must be 'owner', 'write', or 'read'", nil)
 		return
 	}
 
 	err = h.collectionService.AddShare(r.Context(), cid, uid, req.Email, req.Role)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusNotFound, "Collection not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
 			return
 		}
 		if errors.Is(err, service.ErrNotCollectionOwner) {
-			respondWithError(w, http.StatusForbidden, err.Error(), err)
+			respondWithError(h.log, w, http.StatusForbidden, err.Error(), err)
 			return
 		}
 		if errors.Is(err, repository.ErrAlreadyMember) {
-			respondWithError(w, http.StatusConflict, "User is already a member of this collection", err)
+			respondWithError(h.log, w, http.StatusConflict, "User is already a member of this collection", err)
 			return
 		}
 		if errors.Is(err, repository.ErrUserNotFound) {
-			respondWithError(w, http.StatusNotFound, "User not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "User not found", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to add share", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to add share", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, map[string]string{"message": "User added to collection"})
+	respondWithJSON(h.log, w, http.StatusCreated, map[string]string{"message": "User added to collection"})
 }
 
 func (h *CollectionHandler) UpdateShare(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collectionID := chi.URLParam(r, "id")
 	cid, err := uuid.Parse(collectionID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 		return
 	}
 
 	targetUserIDStr := chi.URLParam(r, "userID")
 	targetUID, err := uuid.Parse(targetUserIDStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid target user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid target user ID", err)
 		return
 	}
 
 	var req updateShareRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
 	if req.Role != "owner" && req.Role != "write" && req.Role != "read" {
-		respondWithError(w, http.StatusBadRequest, "Invalid role: must be 'owner', 'write', or 'read'", nil)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid role: must be 'owner', 'write', or 'read'", nil)
 		return
 	}
 
 	err = h.collectionService.UpdateShare(r.Context(), cid, uid, targetUID, req.Role)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusNotFound, "Collection or membership not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Collection or membership not found", err)
 			return
 		}
 		if errors.Is(err, service.ErrNotCollectionOwner) {
-			respondWithError(w, http.StatusForbidden, err.Error(), err)
+			respondWithError(h.log, w, http.StatusForbidden, err.Error(), err)
 			return
 		}
 		if errors.Is(err, service.ErrLastOwner) {
-			respondWithError(w, http.StatusConflict, err.Error(), err)
+			respondWithError(h.log, w, http.StatusConflict, err.Error(), err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to update share", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to update share", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Permission updated"})
+	respondWithJSON(h.log, w, http.StatusOK, map[string]string{"message": "Permission updated"})
 }
 
 func (h *CollectionHandler) RemoveShare(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	collectionID := chi.URLParam(r, "id")
 	cid, err := uuid.Parse(collectionID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 		return
 	}
 
 	targetUserIDStr := chi.URLParam(r, "userID")
 	targetUID, err := uuid.Parse(targetUserIDStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid target user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid target user ID", err)
 		return
 	}
 
 	err = h.collectionService.RemoveShare(r.Context(), cid, uid, targetUID)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusNotFound, "Collection or membership not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Collection or membership not found", err)
 			return
 		}
 		if errors.Is(err, service.ErrNotCollectionOwner) {
-			respondWithError(w, http.StatusForbidden, err.Error(), err)
+			respondWithError(h.log, w, http.StatusForbidden, err.Error(), err)
 			return
 		}
 		if errors.Is(err, service.ErrLastOwner) {
-			respondWithError(w, http.StatusConflict, err.Error(), err)
+			respondWithError(h.log, w, http.StatusConflict, err.Error(), err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to remove share", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to remove share", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "User removed from collection"})
+	respondWithJSON(h.log, w, http.StatusOK, map[string]string{"message": "User removed from collection"})
 }
 
 func mapCollectionToResponse(c *repository.Collection) collectionResponse {

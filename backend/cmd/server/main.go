@@ -115,12 +115,12 @@ func main() {
 
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler(db)
-	authHandler := handler.NewAuthHandler(authService, emailAuthService)
-	collectionHandler := handler.NewCollectionHandler(collectionService)
-	entryHandler := handler.NewEntryHandler(entryService)
-	typeHandler := handler.NewTypeHandler(typeService)
-	aiSearchHandler := handler.NewAISearchHandler(aiSearchService)
-	mcpHandler := handler.NewMCPHandler(mcpService)
+	authHandler := handler.NewAuthHandler(authService, emailAuthService, log)
+	collectionHandler := handler.NewCollectionHandler(collectionService, log)
+	entryHandler := handler.NewEntryHandler(entryService, log)
+	typeHandler := handler.NewTypeHandler(typeService, log)
+	aiSearchHandler := handler.NewAISearchHandler(aiSearchService, log)
+	mcpHandler := handler.NewMCPHandler(mcpService, log)
 	mcpProtocolHandler := handler.NewMCPProtocolHandler(mcpService, collectionService, entryService, typeService, log)
 
 	// Setup router

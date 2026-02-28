@@ -9,7 +9,7 @@
 
 **ForEach with multiple layouts (grid + list)** — when the same conditional interaction wrapper (e.g. `if isSelectMode { Button } else { NavigationLink }`) must be applied in multiple `ForEach` bodies, extract it into a `@ViewBuilder` helper function on the view. Never copy-paste the branch into each loop body — layouts drift and bugs must be fixed in N places.
 
-**Generic `View` extensions belong in `Extensions/`** — utilities like `View.if(_:transform:)` must live in a dedicated file (e.g. `Extensions/View+Conditional.swift`), never inside a feature view file. Defining app-wide extensions in `ContentView.swift` or similar makes them invisible to other views and invites duplication.
+**Generic `View` extensions belong in `Extensions/View+Utilities.swift`** — ALL generic view utilities (`View.if(_:transform:)`, `.glassOrMaterial(in:)`, `.shimmerLoading(_:)`, `ShimmerModifier`, and any future additions) must live in `livlogios/Extensions/View+Utilities.swift`. Never define them inside a feature view file like `ContentView.swift`. This is enforced: do not place any new View extension in a feature file.
 
 **Always use `defer { isLoading = false }` in async load functions** — placing `isLoading = false` at the end of a function is fragile: if a `catch` clause adds a `return`, the flag sticks at `true` forever. Pattern to use in every view load function:
 ```swift
@@ -73,6 +73,10 @@ const UserIDContextKey contextKey = "userID"
 ctx = context.WithValue(ctx, UserIDContextKey, value)
 ```
 All readers must also use the same typed constant, not a raw string.
+
+## Go backend patterns
+
+**Permission level constants** — The strings `"owner"`, `"write"`, `"read"` are used across SQL literals, service comparisons, and handler validations. Always define named constants in the `repository` package and use them consistently everywhere. Never use inline string literals for role values.
 
 ## Common pitfalls
 

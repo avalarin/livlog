@@ -8,15 +8,18 @@ import (
 	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type AISearchHandler struct {
 	aiSearchService *service.AISearchService
+	log             *zap.Logger
 }
 
-func NewAISearchHandler(aiSearchService *service.AISearchService) *AISearchHandler {
+func NewAISearchHandler(aiSearchService *service.AISearchService, log *zap.Logger) *AISearchHandler {
 	return &AISearchHandler{
 		aiSearchService: aiSearchService,
+		log:             log,
 	}
 }
 
@@ -35,24 +38,24 @@ type searchResponse struct {
 func (h *AISearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	var req searchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
 	if req.Query == "" {
-		respondWithError(w, http.StatusBadRequest, "Query is required", nil)
+		respondWithError(h.log, w, http.StatusBadRequest, "Query is required", nil)
 		return
 	}
 
@@ -77,9 +80,9 @@ func (h *AISearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		respondWithError(w, http.StatusInternalServerError, "Failed to perform search", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to perform search", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, searchResponse{Options: options})
+	respondWithJSON(h.log, w, http.StatusOK, searchResponse{Options: options})
 }

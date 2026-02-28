@@ -50,7 +50,7 @@ struct CollectionsView: View {
                     ProgressView()
                 }
             }
-            .navigationTitle("My Collections")
+            .navigationTitle("Grove Lists")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -157,10 +157,10 @@ struct CollectionsView: View {
         defer { isLoading = false }
         do {
             collections = try await CollectionService.shared.getCollections()
-        } catch is CancellationError {
-            return
-        } catch let urlError as URLError where urlError.code == .cancelled {
-            return
+       } catch is CancellationError {
+           return
+       } catch let urlError as URLError where urlError.code == .cancelled {
+           return
         } catch {
             errorMessage = error.localizedDescription
             showError = true

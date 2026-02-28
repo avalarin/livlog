@@ -179,55 +179,47 @@ struct EntryDetailView: View {
                     }
                 }
                 .ignoresSafeArea(edges: .top)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        HStack(spacing: 12) {
-                            Menu {
-                                // TODO add share
-                                
-                                Button {
-                                    showingEditSheet = true
-                                } label: {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                .disabled(collection == nil || !myRole.canWrite)
-                                
-                                Button(role: .destructive) {
-                                    showingDeleteAlert = true
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                            }
-                            .disabled(collection == nil || !myRole.canWrite)
-                        }
-                    }
-                }
-                .sheet(isPresented: $showingEditSheet, onDismiss: {
-                    Task { await loadEntry() }
-                }) {
-                    if let collection = collection {
-                        AddEntryView(
-                            collection: collection,
-                            editingEntryID: entryID
-                        )
-                    }
-                }
-                .alert("Delete Entry", isPresented: $showingDeleteAlert) {
-                    Button("Cancel", role: .cancel) { }
-                    Button("Delete", role: .destructive) {
-                        Task {
-                            await deleteEntry()
-                        }
-                    }
-                } message: {
-                    Text("Are you sure you want to delete \"\(entry.title)\"?")
-                }
             } else {
                 Text("Entry not found")
             }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        showingEditSheet = true
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }.disabled(entry == nil || collection == nil || !myRole.canWrite)
+
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }.disabled(entry == nil || collection == nil || !myRole.canWrite)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+            }
+        }
+        .sheet(isPresented: $showingEditSheet, onDismiss: {
+            Task { await loadEntry() }
+        }) {
+            if let collection = collection {
+                AddEntryView(
+                    collection: collection,
+                    editingEntryID: entryID
+                )
+            }
+        }
+        .alert("Delete Entry", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                Task { await deleteEntry() }
+            }
+        } message: {
+            Text("Are you sure you want to delete \"\(entry?.title ?? "this entry")\"?")
         }
         .task {
             await loadEntry()

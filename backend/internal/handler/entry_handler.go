@@ -13,6 +13,7 @@ import (
 	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type imageMetaResponse struct {
@@ -24,11 +25,13 @@ type imageMetaResponse struct {
 
 type EntryHandler struct {
 	entryService *service.EntryService
+	log          *zap.Logger
 }
 
-func NewEntryHandler(entryService *service.EntryService) *EntryHandler {
+func NewEntryHandler(entryService *service.EntryService, log *zap.Logger) *EntryHandler {
 	return &EntryHandler{
 		entryService: entryService,
+		log:          log,
 	}
 }
 
@@ -82,13 +85,13 @@ type entryResponse struct {
 func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
@@ -97,7 +100,7 @@ func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 	if collectionParam := r.URL.Query().Get("collection_id"); collectionParam != "" {
 		cid, err := uuid.Parse(collectionParam)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 			return
 		}
 		collectionID = &cid
@@ -112,7 +115,7 @@ func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := h.entryService.GetEntriesByUserID(r.Context(), uid, collectionID, limit, offset)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to get entries", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get entries", err)
 		return
 	}
 
@@ -123,7 +126,7 @@ func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	imageMetasMap, err := h.entryService.GetImageMetasByEntryIDs(r.Context(), entryIDs)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to get image metadata", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get image metadata", err)
 		return
 	}
 
@@ -132,25 +135,25 @@ func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 		response[i] = mapEntryToResponse(e, imageMetasMap[e.ID])
 	}
 
-	respondWithJSON(w, http.StatusOK, response)
+	respondWithJSON(h.log, w, http.StatusOK, response)
 }
 
 func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	var req createEntryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
@@ -159,7 +162,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	if req.CollectionID != nil {
 		cid, err := uuid.Parse(*req.CollectionID)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 			return
 		}
 		collectionID = &cid
@@ -170,7 +173,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	if req.TypeID != nil {
 		tid, err := uuid.Parse(*req.TypeID)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid type ID", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Invalid type ID", err)
 			return
 		}
 		typeID = &tid
@@ -179,7 +182,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	// Parse date
 	date, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid date format (use YYYY-MM-DD)", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid date format (use YYYY-MM-DD)", err)
 		return
 	}
 
@@ -188,7 +191,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	for _, img := range req.Images {
 		imageBytes, err := base64.StdEncoding.DecodeString(img.Data)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid image data", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Invalid image data", err)
 			return
 		}
 		images = append(images, repository.EntryImage{
@@ -203,7 +206,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	for _, idStr := range req.SeedImageIDs {
 		sid, err := uuid.Parse(idStr)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid seed image ID", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Invalid seed image ID", err)
 			return
 		}
 		seedImageIDs = append(seedImageIDs, sid)
@@ -227,83 +230,90 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, service.ErrInvalidDescription) ||
 			errors.Is(err, service.ErrInvalidScore) ||
 			errors.Is(err, service.ErrInvalidFieldValue) ||
-			errors.Is(err, repository.ErrTypeNotFound) {
-			respondWithError(w, http.StatusBadRequest, err.Error(), err)
+			errors.Is(err, repository.ErrTypeNotFound) ||
+			errors.Is(err, repository.ErrSeedImageNotFound) {
+			respondWithError(h.log, w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusBadRequest, "Collection not found or not accessible", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Collection not found or not accessible", err)
 			return
 		}
 		if errors.Is(err, service.ErrNotCollectionOwner) {
-			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
+			respondWithError(h.log, w, http.StatusForbidden, "You do not have write access to this collection", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to create entry", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to create entry", err)
 		return
 	}
 
-	imageMetas, _ := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
-	respondWithJSON(w, http.StatusCreated, mapEntryToResponse(entry, imageMetas))
+	imageMetas, err := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
+	if err != nil {
+		h.log.Warn("failed to fetch image metas after create", zap.Stringer("entry_id", entry.ID), zap.Error(err))
+	}
+	respondWithJSON(h.log, w, http.StatusCreated, mapEntryToResponse(entry, imageMetas))
 }
 
 func (h *EntryHandler) GetEntry(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	entryID := chi.URLParam(r, "id")
 	eid, err := uuid.Parse(entryID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid entry ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid entry ID", err)
 		return
 	}
 
 	entry, err := h.entryService.GetEntryByID(r.Context(), eid, uid)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntryNotFound) {
-			respondWithError(w, http.StatusNotFound, "Entry not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Entry not found", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to get entry", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get entry", err)
 		return
 	}
 
-	imageMetas, _ := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
-	respondWithJSON(w, http.StatusOK, mapEntryToResponse(entry, imageMetas))
+	imageMetas, err := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
+	if err != nil {
+		h.log.Warn("failed to fetch image metas for entry", zap.Stringer("entry_id", entry.ID), zap.Error(err))
+	}
+	respondWithJSON(h.log, w, http.StatusOK, mapEntryToResponse(entry, imageMetas))
 }
 
 func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	entryID := chi.URLParam(r, "id")
 	eid, err := uuid.Parse(entryID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid entry ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid entry ID", err)
 		return
 	}
 
 	var req createEntryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
@@ -312,7 +322,7 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	if req.CollectionID != nil {
 		cid, err := uuid.Parse(*req.CollectionID)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid collection ID", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
 			return
 		}
 		collectionID = &cid
@@ -323,7 +333,7 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	if req.TypeID != nil {
 		tid, err := uuid.Parse(*req.TypeID)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid type ID", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Invalid type ID", err)
 			return
 		}
 		typeID = &tid
@@ -332,7 +342,7 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	// Parse date
 	date, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid date format (use YYYY-MM-DD)", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid date format (use YYYY-MM-DD)", err)
 		return
 	}
 
@@ -342,7 +352,7 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 		for _, img := range req.Images {
 			imageBytes, err := base64.StdEncoding.DecodeString(img.Data)
 			if err != nil {
-				respondWithError(w, http.StatusBadRequest, "Invalid image data", err)
+				respondWithError(h.log, w, http.StatusBadRequest, "Invalid image data", err)
 				return
 			}
 			images = append(images, repository.EntryImage{
@@ -368,7 +378,7 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntryNotFound) {
-			respondWithError(w, http.StatusNotFound, "Entry not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Entry not found", err)
 			return
 		}
 		if errors.Is(err, service.ErrInvalidTitle) ||
@@ -376,71 +386,74 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, service.ErrInvalidScore) ||
 			errors.Is(err, service.ErrInvalidFieldValue) ||
 			errors.Is(err, repository.ErrTypeNotFound) {
-			respondWithError(w, http.StatusBadRequest, err.Error(), err)
+			respondWithError(h.log, w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusBadRequest, "Collection not found or not accessible", err)
+			respondWithError(h.log, w, http.StatusBadRequest, "Collection not found or not accessible", err)
 			return
 		}
 		if errors.Is(err, service.ErrNotCollectionOwner) {
-			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
+			respondWithError(h.log, w, http.StatusForbidden, "You do not have write access to this collection", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to update entry", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to update entry", err)
 		return
 	}
 
-	imageMetas, _ := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
-	respondWithJSON(w, http.StatusOK, mapEntryToResponse(entry, imageMetas))
+	imageMetas, err := h.entryService.GetEntryImageMetas(r.Context(), entry.ID)
+	if err != nil {
+		h.log.Warn("failed to fetch image metas after update", zap.Stringer("entry_id", entry.ID), zap.Error(err))
+	}
+	respondWithJSON(h.log, w, http.StatusOK, mapEntryToResponse(entry, imageMetas))
 }
 
 func (h *EntryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	entryID := chi.URLParam(r, "id")
 	eid, err := uuid.Parse(entryID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid entry ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid entry ID", err)
 		return
 	}
 
 	err = h.entryService.DeleteEntry(r.Context(), eid, uid)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntryNotFound) {
-			respondWithError(w, http.StatusNotFound, "Entry not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Entry not found", err)
 			return
 		}
 		if errors.Is(err, repository.ErrCollectionNotFound) {
-			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
+			respondWithError(h.log, w, http.StatusForbidden, "You do not have write access to this collection", err)
 			return
 		}
 		if errors.Is(err, service.ErrNotCollectionOwner) {
-			respondWithError(w, http.StatusForbidden, "You do not have write access to this collection", err)
+			respondWithError(h.log, w, http.StatusForbidden, "You do not have write access to this collection", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to delete entry", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to delete entry", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Entry deleted successfully"})
+	respondWithJSON(h.log, w, http.StatusOK, map[string]string{"message": "Entry deleted successfully"})
 }
 
 func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 	imageID := chi.URLParam(r, "id")
 	imgID, err := uuid.Parse(imageID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid image ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid image ID", err)
 		return
 	}
 
@@ -456,10 +469,10 @@ func (h *EntryHandler) GetImage(w http.ResponseWriter, r *http.Request) {
 	img, err := h.entryService.GetImageByID(r.Context(), imgID)
 	if err != nil {
 		if errors.Is(err, repository.ErrEntryNotFound) {
-			respondWithError(w, http.StatusNotFound, "Image not found", err)
+			respondWithError(h.log, w, http.StatusNotFound, "Image not found", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Failed to get image", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get image", err)
 		return
 	}
 
@@ -475,29 +488,29 @@ type bulkDeleteRequest struct {
 func (h *EntryHandler) BulkDeleteEntries(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
 	var req bulkDeleteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
 	if len(req.IDs) == 0 {
-		respondWithError(w, http.StatusBadRequest, "No IDs provided", nil)
+		respondWithError(h.log, w, http.StatusBadRequest, "No IDs provided", nil)
 		return
 	}
 
 	if len(req.IDs) > 100 {
-		respondWithError(w, http.StatusBadRequest, "Too many IDs: maximum 100", nil)
+		respondWithError(h.log, w, http.StatusBadRequest, "Too many IDs: maximum 100", nil)
 		return
 	}
 
@@ -505,7 +518,7 @@ func (h *EntryHandler) BulkDeleteEntries(w http.ResponseWriter, r *http.Request)
 	for _, idStr := range req.IDs {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Invalid entry ID: %s", idStr), err)
+			respondWithError(h.log, w, http.StatusBadRequest, fmt.Sprintf("Invalid entry ID: %s", idStr), err)
 			return
 		}
 		ids = append(ids, id)
@@ -513,23 +526,23 @@ func (h *EntryHandler) BulkDeleteEntries(w http.ResponseWriter, r *http.Request)
 
 	count, err := h.entryService.DeleteEntries(r.Context(), ids, uid)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to delete entries", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to delete entries", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]int64{"deleted_count": count})
+	respondWithJSON(h.log, w, http.StatusOK, map[string]int64{"deleted_count": count})
 }
 
 func (h *EntryHandler) SearchEntries(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "User not authenticated", nil)
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
 		return
 	}
 
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid user ID", err)
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
 		return
 	}
 
@@ -542,7 +555,7 @@ func (h *EntryHandler) SearchEntries(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := h.entryService.SearchEntries(r.Context(), uid, query, limit, offset)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to search entries", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to search entries", err)
 		return
 	}
 
@@ -553,7 +566,7 @@ func (h *EntryHandler) SearchEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	imageMetasMap, err := h.entryService.GetImageMetasByEntryIDs(r.Context(), entryIDs)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to get image metadata", err)
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get image metadata", err)
 		return
 	}
 
@@ -562,7 +575,7 @@ func (h *EntryHandler) SearchEntries(w http.ResponseWriter, r *http.Request) {
 		response[i] = mapEntryToResponse(e, imageMetasMap[e.ID])
 	}
 
-	respondWithJSON(w, http.StatusOK, response)
+	respondWithJSON(h.log, w, http.StatusOK, response)
 }
 
 func mapEntryToResponse(e *repository.Entry, imageMetas []repository.ImageMeta) entryResponse {
