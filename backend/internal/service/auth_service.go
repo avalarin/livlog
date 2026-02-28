@@ -275,7 +275,7 @@ func mapUserToResponse(user *repository.User, providers []string) *User {
 		ID:            user.ID.String(),
 		Email:         user.Email,
 		EmailVerified: user.EmailVerified,
-		DisplayName:   user.DisplayName,
+		DisplayName:   coalesceStringPtr(user.DisplayName, user.Email),
 		AuthProviders: providers,
 		CreatedAt:     user.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:     &updatedAt,
@@ -287,4 +287,12 @@ func getEmailString(email *string) string {
 		return ""
 	}
 	return *email
+}
+
+// coalesceStringPtr returns the first non-nil, non-empty string pointer, or nil.
+func coalesceStringPtr(a, b *string) *string {
+	if a != nil && *a != "" {
+		return a
+	}
+	return b
 }

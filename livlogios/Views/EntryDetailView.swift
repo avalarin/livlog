@@ -20,6 +20,7 @@ struct EntryDetailView: View {
 
     @State private var entry: EntryModel?
     @State private var entryType: EntryTypeModel?
+    @State private var collection: CollectionModel?
     @State private var images: [UIImage] = []
 
     @State private var showingDeleteAlert = false
@@ -188,6 +189,7 @@ struct EntryDetailView: View {
                                 } label: {
                                     Image(systemName: "pencil.circle")
                                 }
+                                .disabled(collection == nil)
 
                                 Menu {
                                     Button(role: .destructive) {
@@ -205,13 +207,11 @@ struct EntryDetailView: View {
                 .sheet(isPresented: $showingEditSheet, onDismiss: {
                     Task { await loadEntry() }
                 }) {
-                    if let collectionID = entry.collectionID {
+                    if let collection = collection {
                         AddEntryView(
-                            collection: CollectionModel(id: collectionID, name: "", icon: "📝"),
+                            collection: collection,
                             editingEntryID: entryID
                         )
-                    } else {
-                        Color.clear.onAppear { showingEditSheet = false }
                     }
                 }
                 .alert("Delete Entry", isPresented: $showingDeleteAlert) {
@@ -256,6 +256,10 @@ struct EntryDetailView: View {
 
             if let entry = entry {
                 images = await loadImages(imageIDs: entry.images)
+
+                if let collectionID = entry.collectionID {
+                    collection = try await CollectionService.shared.getCollection(id: collectionID)
+                }
             }
         } catch {
             errorMessage = "Failed to load entry: \(error.localizedDescription)"

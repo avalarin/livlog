@@ -603,12 +603,10 @@ struct ShareCollectionSheet: View {
         NavigationStack {
             Form {
                 Section("Email Address") {
-                    TextField(text: $email, prompt: Text("colleague@example.com").foregroundStyle(Color(.placeholderText))) {
-                        EmptyView()
-                    }
-                    .textContentType(.emailAddress)
-                    .keyboardType(.emailAddress)
-                    .autocapitalization(.none)
+                    TextField("colleague@example.com", text: $email)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
                 }
 
                 Section("Permission") {

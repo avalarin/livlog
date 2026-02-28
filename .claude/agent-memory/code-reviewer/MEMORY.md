@@ -229,3 +229,15 @@
 
 - **[code-smell] Magic string role values** — seen 4 times
   - Last seen: collection_service.go:91, 153, 185 + collection_handler.go:342 — inline string literals "owner", "write", "read" still scattered with no named constants
+
+- **[bug] GetCollectionsByUserID GROUP BY includes cs.owner_id — duplicate rows for multi-share users** — seen 2 times
+  - Last seen: collection_repository.go:118 — GROUP BY c.id, cs.permission_level, cs.owner_id; a user with two rows in collection_shares for the same collection (e.g. re-invited by a second owner) produces two rows; previous session flagged this with u_inviter columns, fix narrowed it but root cause persists
+
+- **[wrong-layer] Placeholder CollectionModel with fake data constructed in view layer** — seen 3 times (PARTIALLY FIXED — else branch added)
+  - Last seen: EntryDetailView.swift:210 — CollectionModel(id: collectionID, name: "", icon: "📝") still passed to AddEntryView; else branch now dismisses the sheet, but the placeholder model remains unfixed for the happy path
+
+- **[bug] Edit sheet blank when entry.collectionID is nil — else branch dismisses, not informs** — seen 4 times
+  - Last seen: EntryDetailView.swift:213-214 — Color.clear.onAppear { showingEditSheet = false } closes the sheet silently with no user feedback; user taps Edit, sheet flashes open and closes
+
+- **[bug] coalesceStringPtr display-name fallback leaks email as display name** — seen 1 time
+  - Last seen: auth_service.go:278 — coalesceStringPtr(user.DisplayName, user.Email) returns the email pointer directly as DisplayName; the caller (mapUserToResponse) sets DisplayName = email, causing the email string to appear wherever display names are rendered (e.g. GetCollectionMembers.display_name is now always non-nil, making the iOS empty-displayName fallback in CollectionsView:468 dead code)

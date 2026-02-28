@@ -18,6 +18,17 @@ actor CollectionService {
         self.encoder = JSONEncoder()
     }
 
+    // MARK: - Get Collection
+
+    func getCollection(id: String) async throws -> CollectionModel {
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(id)",
+            method: "GET"
+        )
+
+        return try decoder.decode(CollectionModel.self, from: data)
+    }
+
     // MARK: - Get Collections
 
     func getCollections() async throws -> [CollectionModel] {
