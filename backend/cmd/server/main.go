@@ -21,6 +21,7 @@ import (
 	"github.com/avalarin/livlog/backend/internal/repository"
 	"github.com/avalarin/livlog/backend/internal/seed"
 	"github.com/avalarin/livlog/backend/internal/service"
+	"github.com/avalarin/livlog/backend/internal/version"
 )
 
 func main() {
@@ -44,7 +45,7 @@ func main() {
 	}()
 
 	log.Info("starting livlog backend",
-		zap.String("version", handler.Version),
+		zap.String("version", version.Full()),
 		zap.String("address", cfg.Server.Address()),
 	)
 

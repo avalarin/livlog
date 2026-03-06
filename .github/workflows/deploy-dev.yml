@@ -1,0 +1,48 @@
+name: Deploy Dev
+
+on:
+  workflow_run:
+    workflows:
+      - Build
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Dev Server
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: backend/deploy
+
+      - name: Copy deploy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: backend/deploy/docker-dev.env,backend/deploy/docker-rollout.sh
+          target: /opt/livlog
+          strip_components: 2
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          envs: GHCR_PAT
+          script: |
+            echo "$GHCR_PAT" | docker login ghcr.io -u avalarin --password-stdin
+            chmod +x /opt/livlog/docker-rollout.sh
+            /opt/livlog/docker-rollout.sh --env /opt/livlog/docker-dev.env --image ghcr.io/avalarin/livlog:latest
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}

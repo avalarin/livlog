@@ -5,16 +5,14 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
-    environment:
-      - LIVLOG_DATABASE_HOST=postgres
-      - LIVLOG_DATABASE_PORT=5432
-      - LIVLOG_DATABASE_NAME=livlog
-      - LIVLOG_DATABASE_USER=livlog
-      - LIVLOG_DATABASE_PASSWORD=livlog
-      - LIVLOG_DATABASE_SSLMODE=disable
-      - LIVLOG_LOGGING_FORMAT=json
+    command:
+      - -config
+      - /app/data/config.yaml
+      - -migrations
+      - /app/migrations
     volumes:
       - ./keys:/app/keys:ro
+      - ./config.yaml:/app/data/config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy

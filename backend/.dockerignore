@@ -1,0 +1,16 @@
+.git
+.github
+.gitignore
+*.md
+keys/
+config.yaml
+config.local.yaml
+config.production.yaml
+.env
+.env.*
+bin/
+coverage.*
+.idea/
+.vscode/
+docker-compose.yml
+.golangci.yml

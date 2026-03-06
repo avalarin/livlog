@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/avalarin/livlog/backend/internal/repository"
+	"github.com/avalarin/livlog/backend/internal/version"
 )
-
-const Version = "1.0.0"
 
 type HealthHandler struct {
 	db        *repository.DB
@@ -43,7 +42,7 @@ func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	response := HealthResponse{
 		Status:    "ok",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Version:   Version,
+		Version:   version.Full(),
 		Uptime:    time.Since(h.startTime).Round(time.Second).String(),
 		Database: DatabaseStatus{
 			Status: "connected",
