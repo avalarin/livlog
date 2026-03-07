@@ -1,49 +1,10 @@
-//
-//  livlogiosTests.swift
-//  livlogiosTests
-//
-//  Created by avprokopev on 31.12.2025.
-//
-
 import Foundation
 @testable import livlogios
 import Testing
 
-struct livlogiosTests {
-
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-    }
-
-    @Test func testCollectionModelDecoding() async throws {
-        // Test decoding a collection response from the backend
-        let jsonString = """
-        {
-            "id": "123e4567-e89b-12d3-a456-426614174000",
-            "name": "Movies",
-            "icon": "system:movie",
-            "color": "vibrant-coral",
-            "created_at": "2024-02-01T10:30:45Z",
-            "updated_at": "2024-02-01T10:30:45Z"
-        }
-        """
-
-        guard let jsonData = jsonString.data(using: .utf8) else {
-            #expect(Bool(false), "Failed to convert string to data")
-            return
-        }
-        let decoder = JSONDecoder()
-
-        let collection = try decoder.decode(CollectionModel.self, from: jsonData)
-
-        #expect(collection.id == "123e4567-e89b-12d3-a456-426614174000")
-        #expect(collection.name == "Movies")
-        #expect(collection.icon == "system:movie")
-        #expect(collection.color == "vibrant-coral")
-    }
+struct EntryModelTests {
 
     @Test func testEntryModelDecoding() async throws {
-        // Test decoding an entry response from the backend
         let jsonString = """
         {
             "id": "123e4567-e89b-12d3-a456-426614174001",
@@ -69,9 +30,8 @@ struct livlogiosTests {
             #expect(Bool(false), "Failed to convert string to data")
             return
         }
-        let decoder = JSONDecoder()
 
-        let entry = try decoder.decode(EntryModel.self, from: jsonData)
+        let entry = try JSONDecoder().decode(EntryModel.self, from: jsonData)
 
         #expect(entry.id == "123e4567-e89b-12d3-a456-426614174001")
         #expect(entry.collectionID == "123e4567-e89b-12d3-a456-426614174000")
@@ -88,7 +48,6 @@ struct livlogiosTests {
     }
 
     @Test func testEntryModelDecodingWithTimezone() async throws {
-        // Test decoding an entry with timezone offset instead of Z
         let jsonString = """
         {
             "id": "123e4567-e89b-12d3-a456-426614174001",
@@ -108,13 +67,11 @@ struct livlogiosTests {
             #expect(Bool(false), "Failed to convert string to data")
             return
         }
-        let decoder = JSONDecoder()
 
-        let entry = try decoder.decode(EntryModel.self, from: jsonData)
+        let entry = try JSONDecoder().decode(EntryModel.self, from: jsonData)
 
         #expect(entry.id == "123e4567-e89b-12d3-a456-426614174001")
         #expect(entry.collectionID == nil)
         #expect(entry.score == .okay)
     }
-
 }
