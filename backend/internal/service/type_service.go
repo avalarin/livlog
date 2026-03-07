@@ -5,8 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/avalarin/livlog/backend/internal/repository"
 	"github.com/google/uuid"
+
+	"github.com/avalarin/livlog/backend/internal/repository"
 )
 
 var (

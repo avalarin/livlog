@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/avalarin/livlog/backend/internal/config"
-	"github.com/avalarin/livlog/backend/internal/repository"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/avalarin/livlog/backend/internal/config"
+	"github.com/avalarin/livlog/backend/internal/repository"
 )
 
 var (

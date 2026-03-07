@@ -8,13 +8,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/avalarin/livlog/backend/internal/repository"
-	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"go.uber.org/zap"
+
+	"github.com/avalarin/livlog/backend/internal/repository"
+	"github.com/avalarin/livlog/backend/internal/service"
 )
 
 const maxAddEntriesBatch = 100

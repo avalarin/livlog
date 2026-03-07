@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+
+	"github.com/avalarin/livlog/backend/internal/service"
 )
 
 type AuthHandler struct {
@@ -282,7 +283,7 @@ type errorResponse struct {
 func respondWithError(log *zap.Logger, w http.ResponseWriter, code int, message string, err error) {
 	if code == http.StatusInternalServerError && err != nil && errors.Is(err, context.Canceled) {
 		respondWithJSON(log, w, http.StatusServiceUnavailable,
-			errorResponse{Error: http.StatusText(http.StatusServiceUnavailable), Message: "request cancelled by client"})
+			errorResponse{Error: http.StatusText(http.StatusServiceUnavailable), Message: "request canceled by client"})
 		return
 	}
 	if code == http.StatusInternalServerError && err != nil && errors.Is(err, context.DeadlineExceeded) {

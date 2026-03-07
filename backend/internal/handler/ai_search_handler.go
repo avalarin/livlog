@@ -5,10 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/avalarin/livlog/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/avalarin/livlog/backend/internal/service"
 )
 
 type AISearchHandler struct {

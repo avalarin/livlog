@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/avalarin/livlog/backend/internal/repository"
 	"github.com/google/uuid"
+
+	"github.com/avalarin/livlog/backend/internal/repository"
 )
 
 type MCPStatus struct {
