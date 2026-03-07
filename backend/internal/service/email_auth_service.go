@@ -76,7 +76,11 @@ func (s *EmailAuthService) SendVerificationCode(ctx context.Context, email, devi
 	// Generate code: random if email is enabled, hardcoded otherwise
 	var code string
 	if s.emailSender.IsEnabled() {
-		code = generateVerificationCode()
+		var err error
+		code, err = generateVerificationCode()
+		if err != nil {
+			return err
+		}
 	} else {
 		code = HardcodedVerificationCode
 	}
@@ -207,12 +211,12 @@ func (s *EmailAuthService) checkRateLimit(ctx context.Context, email, deviceID, 
 }
 
 // generateVerificationCode generates a cryptographically random 6-digit code
-func generateVerificationCode() string {
+func generateVerificationCode() (string, error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
 	if err != nil {
-		panic("crypto/rand failed: " + err.Error())
+		return "", fmt.Errorf("failed to generate random code: %w", err)
 	}
-	return fmt.Sprintf("%06d", n.Int64())
+	return fmt.Sprintf("%06d", n.Int64()), nil
 }
 
 // Helper functions

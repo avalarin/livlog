@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -14,6 +15,7 @@ type EmailSender struct {
 	enabled     bool
 	apiKey      string
 	fromAddress string
+	httpClient  *http.Client
 	log         *zap.Logger
 }
 
@@ -22,13 +24,14 @@ func NewEmailSender(enabled bool, apiKey string, fromAddress string, log *zap.Lo
 		enabled:     enabled,
 		apiKey:      apiKey,
 		fromAddress: fromAddress,
+		httpClient:  &http.Client{Timeout: 10 * time.Second},
 		log:         log,
 	}
 }
 
 func (s *EmailSender) SendVerificationCode(ctx context.Context, email string, code string) error {
 	if !s.enabled {
-		s.log.Info("email sending disabled, skipping", zap.String("email", email), zap.String("code", code))
+		s.log.Debug("email sending disabled, skipping", zap.String("email", email), zap.String("code", code))
 		return nil
 	}
 
@@ -60,7 +63,7 @@ func (s *EmailSender) sendViaResend(ctx context.Context, toEmail string, code st
 	req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
