@@ -107,10 +107,10 @@ func main() {
 	}
 
 	// Initialize email sender
-	emailSender := service.NewEmailSender(cfg.Email.Enabled, cfg.Email.APIKey, cfg.Email.FromAddress, log)
+	emailSender := service.NewEmailSender(cfg.Email.Enabled, cfg.Email.APIKey, cfg.Email.FromName, cfg.Email.FromAddress, log)
 
 	// Initialize email auth service
-	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtService, emailSender, resendCooldown, cfg.Email.MaxCodesPerHour)
+	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtService, emailSender, resendCooldown, cfg.Email.MaxCodesPerHour, cfg.Email.IPRateLimitEnabled)
 
 	// Initialize collection, entry, and type services
 	collectionService := service.NewCollectionService(collectionRepo, userRepo)

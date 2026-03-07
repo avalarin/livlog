@@ -15,6 +15,7 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showVerificationView = false
+    @State private var resendCooldown: Int = 180
 
     var body: some View {
         NavigationStack {
@@ -108,7 +109,7 @@ struct LoginView: View {
                 await connectionMonitor.fetchServerVersion()
             }
             .navigationDestination(isPresented: $showVerificationView) {
-                EmailVerificationView(email: email)
+                EmailVerificationView(email: email, resendCooldown: resendCooldown)
                     .environmentObject(appState)
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
@@ -132,7 +133,8 @@ struct LoginView: View {
 
         Task {
             do {
-                _ = try await appState.authService.sendVerificationCode(email: email)
+                let response = try await appState.authService.sendVerificationCode(email: email)
+                resendCooldown = response.resendCooldown
                 showVerificationView = true
             } catch {
                 if let authError = error as? AuthError {

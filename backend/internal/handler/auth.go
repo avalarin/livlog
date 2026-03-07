@@ -153,8 +153,9 @@ type sendCodeRequest struct {
 }
 
 type sendCodeResponse struct {
-	Message   string `json:"message"`
-	ExpiresIn int    `json:"expires_in"`
+	Message        string `json:"message"`
+	ExpiresIn      int    `json:"expires_in"`
+	ResendCooldown int    `json:"resend_cooldown"`
 }
 
 type rateLimitErrorResponse struct {
@@ -181,7 +182,7 @@ func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if errors.Is(err, service.ErrRateLimitExceeded) {
-			retryAfter := h.emailAuthService.GetRetryAfter()
+			retryAfter := h.emailAuthService.GetResendCooldown()
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			respondWithJSON(h.log, w, http.StatusTooManyRequests, rateLimitErrorResponse{
 				Error:   "RATE_LIMIT_EXCEEDED",
@@ -195,8 +196,9 @@ func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Reques
 	}
 
 	respondWithJSON(h.log, w, http.StatusOK, sendCodeResponse{
-		Message:   "Verification code sent",
-		ExpiresIn: int(service.VerificationCodeExpiry.Seconds()),
+		Message:        "Verification code sent",
+		ExpiresIn:      int(service.VerificationCodeExpiry.Seconds()),
+		ResendCooldown: h.emailAuthService.GetResendCooldown(),
 	})
 }
 
@@ -223,7 +225,7 @@ func (h *AuthHandler) ResendVerificationCode(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		if errors.Is(err, service.ErrRateLimitExceeded) {
-			retryAfter := h.emailAuthService.GetRetryAfter()
+			retryAfter := h.emailAuthService.GetResendCooldown()
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			respondWithJSON(h.log, w, http.StatusTooManyRequests, rateLimitErrorResponse{
 				Error:   "RATE_LIMIT_EXCEEDED",
@@ -237,8 +239,9 @@ func (h *AuthHandler) ResendVerificationCode(w http.ResponseWriter, r *http.Requ
 	}
 
 	respondWithJSON(h.log, w, http.StatusOK, sendCodeResponse{
-		Message:   "Verification code resent",
-		ExpiresIn: int(service.VerificationCodeExpiry.Seconds()),
+		Message:        "Verification code resent",
+		ExpiresIn:      int(service.VerificationCodeExpiry.Seconds()),
+		ResendCooldown: h.emailAuthService.GetResendCooldown(),
 	})
 }
 

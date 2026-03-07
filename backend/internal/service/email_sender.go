@@ -14,15 +14,17 @@ import (
 type EmailSender struct {
 	enabled     bool
 	apiKey      string
+	fromName    string
 	fromAddress string
 	httpClient  *http.Client
 	log         *zap.Logger
 }
 
-func NewEmailSender(enabled bool, apiKey string, fromAddress string, log *zap.Logger) *EmailSender {
+func NewEmailSender(enabled bool, apiKey string, fromName string, fromAddress string, log *zap.Logger) *EmailSender {
 	return &EmailSender{
 		enabled:     enabled,
 		apiKey:      apiKey,
+		fromName:    fromName,
 		fromAddress: fromAddress,
 		httpClient:  &http.Client{Timeout: 10 * time.Second},
 		log:         log,
@@ -43,8 +45,13 @@ func (s *EmailSender) IsEnabled() bool {
 }
 
 func (s *EmailSender) sendViaResend(ctx context.Context, toEmail string, code string) error {
+	from := s.fromAddress
+	if s.fromName != "" {
+		from = fmt.Sprintf("%s <%s>", s.fromName, s.fromAddress)
+	}
+
 	payload := map[string]interface{}{
-		"from":    s.fromAddress,
+		"from":    from,
 		"to":      []string{toEmail},
 		"subject": "Your Grove verification code",
 		"text":    fmt.Sprintf("Your verification code is: %s\n\nThis code will expire in 5 minutes.\n\nIf you didn't request this code, you can safely ignore this email.", code),

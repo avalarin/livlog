@@ -57,11 +57,13 @@ type OpenRouterConfig struct {
 }
 
 type EmailConfig struct {
-	Enabled         bool   `mapstructure:"enabled"`
-	APIKey          string `mapstructure:"api_key"`
-	FromAddress     string `mapstructure:"from_address"`
-	ResendCooldown  string `mapstructure:"resend_cooldown"` // duration string like "180s"
-	MaxCodesPerHour int    `mapstructure:"max_codes_per_hour"`
+	Enabled            bool   `mapstructure:"enabled"`
+	APIKey             string `mapstructure:"api_key"`
+	FromName           string `mapstructure:"from_name"`
+	FromAddress        string `mapstructure:"from_address"`
+	ResendCooldown     string `mapstructure:"resend_cooldown"` // duration string like "180s"
+	MaxCodesPerHour    int    `mapstructure:"max_codes_per_hour"`
+	IPRateLimitEnabled bool   `mapstructure:"ip_rate_limit_enabled"`
 }
 
 type RateLimitConfig struct {
@@ -138,9 +140,11 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("ratelimit.ai_search_unlimited_limit", 0) // 0 means no limit
 	v.SetDefault("ratelimit.ai_search_period", "24h")
 	v.SetDefault("email.enabled", false)
+	v.SetDefault("email.from_name", "Grove")
 	v.SetDefault("email.from_address", "noreply@livlog.net")
 	v.SetDefault("email.resend_cooldown", "180s")
 	v.SetDefault("email.max_codes_per_hour", 5)
+	v.SetDefault("email.ip_rate_limit_enabled", true)
 
 	// Read config file
 	if configPath != "" {

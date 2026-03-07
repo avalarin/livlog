@@ -40,6 +40,23 @@ openrouter:
   base_url: "https://openrouter.ai/api/v1/chat/completions"
   model: "perplexity/sonar"
 
+email:
+  # Enable real email sending via Resend.com
+  # When disabled (default), verification code is always "000000" and no email is sent
+  enabled: false
+  # Resend.com API key — get yours at https://resend.com
+  api_key: "re_"
+  # Sender display name (e.g. "Grove")
+  from_name: "Grove"
+  # Sender address (must be verified in your Resend.com domain)
+  from_address: "noreply@livlog.net"
+  # Minimum time between verification code requests (per email/device/IP)
+  resend_cooldown: "180s"
+  # Maximum number of verification codes per email per hour
+  max_codes_per_hour: 5
+  # Enable IP-based rate limiting (disable for local dev behind shared NAT)
+  ip_rate_limit_enabled: true
+
 ratelimit:
   # AI search rate limits by policy
   ai_search_basic_limit: 5  # Number of AI searches for basic users

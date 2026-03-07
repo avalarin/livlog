@@ -32,13 +32,14 @@ var (
 )
 
 type EmailAuthService struct {
-	userRepo        *repository.UserRepository
-	codeRepo        *repository.VerificationCodeRepository
-	attemptRepo     *repository.VerificationAttemptRepository
-	jwtService      *JWTService
-	emailSender     *EmailSender
-	resendCooldown  time.Duration
-	maxCodesPerHour int
+	userRepo           *repository.UserRepository
+	codeRepo           *repository.VerificationCodeRepository
+	attemptRepo        *repository.VerificationAttemptRepository
+	jwtService         *JWTService
+	emailSender        *EmailSender
+	resendCooldown     time.Duration
+	maxCodesPerHour    int
+	ipRateLimitEnabled bool
 }
 
 func NewEmailAuthService(
@@ -49,15 +50,17 @@ func NewEmailAuthService(
 	emailSender *EmailSender,
 	resendCooldown time.Duration,
 	maxCodesPerHour int,
+	ipRateLimitEnabled bool,
 ) *EmailAuthService {
 	return &EmailAuthService{
-		userRepo:        userRepo,
-		codeRepo:        codeRepo,
-		attemptRepo:     attemptRepo,
-		jwtService:      jwtService,
-		emailSender:     emailSender,
-		resendCooldown:  resendCooldown,
-		maxCodesPerHour: maxCodesPerHour,
+		userRepo:           userRepo,
+		codeRepo:           codeRepo,
+		attemptRepo:        attemptRepo,
+		jwtService:         jwtService,
+		emailSender:        emailSender,
+		resendCooldown:     resendCooldown,
+		maxCodesPerHour:    maxCodesPerHour,
+		ipRateLimitEnabled: ipRateLimitEnabled,
 	}
 }
 
@@ -89,7 +92,11 @@ func (s *EmailAuthService) SendVerificationCode(ctx context.Context, email, devi
 	expiresAt := time.Now().Add(VerificationCodeExpiry)
 
 	// Record attempt in DB first (consumes rate-limit window regardless of outcome)
-	if err := s.attemptRepo.RecordAttempt(ctx, email, deviceID, ipAddress); err != nil {
+	recordIP := ipAddress
+	if !s.ipRateLimitEnabled {
+		recordIP = ""
+	}
+	if err := s.attemptRepo.RecordAttempt(ctx, email, deviceID, recordIP); err != nil {
 		return fmt.Errorf("failed to record verification attempt: %w", err)
 	}
 
@@ -182,15 +189,19 @@ func (s *EmailAuthService) VerifyCode(ctx context.Context, email, code string) (
 	}, nil
 }
 
-// GetRetryAfter returns the configured cooldown in seconds
-func (s *EmailAuthService) GetRetryAfter() int {
+// GetResendCooldown returns the configured cooldown in seconds
+func (s *EmailAuthService) GetResendCooldown() int {
 	return int(s.resendCooldown.Seconds())
 }
 
 // checkRateLimit checks both the cooldown and hourly limits
 func (s *EmailAuthService) checkRateLimit(ctx context.Context, email, deviceID, ipAddress string) error {
 	// Check cooldown (3 min between attempts from same email/device/ip)
-	hasRecent, err := s.attemptRepo.HasRecentAttempt(ctx, email, deviceID, ipAddress, s.resendCooldown)
+	checkedIP := ipAddress
+	if !s.ipRateLimitEnabled {
+		checkedIP = ""
+	}
+	hasRecent, err := s.attemptRepo.HasRecentAttempt(ctx, email, deviceID, checkedIP, s.resendCooldown)
 	if err != nil {
 		return fmt.Errorf("failed to check rate limit: %w", err)
 	}

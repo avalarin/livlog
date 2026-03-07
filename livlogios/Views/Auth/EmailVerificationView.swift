@@ -12,13 +12,14 @@ struct EmailVerificationView: View {
     @Environment(\.dismiss) private var dismiss
 
     let email: String
+    let resendCooldown: Int
 
     @State private var code: [String] = Array(repeating: "", count: 6)
     @FocusState private var focusedField: Int?
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var resendTimer: Int = 180
-    @State private var timerActive = true
+    @State private var resendTimer: Int = 0
+    @State private var timerActive = false
 
     var body: some View {
         VStack(spacing: 32) {
@@ -108,19 +109,29 @@ struct EmailVerificationView: View {
     }
 
     private func handleCodeInput(at index: Int, oldValue: String, newValue: String) {
-        // Only keep last character
-        if newValue.count > 1 {
-            code[index] = String(newValue.suffix(1))
-        }
-
         // Only allow digits
-        if !newValue.isEmpty && !newValue.allSatisfy(\.isNumber) {
+        let digits = newValue.filter(\.isNumber)
+        if digits != newValue {
             code[index] = oldValue
             return
         }
 
+        // Handle paste: distribute digits across fields starting at current index
+        if digits.count > 1 {
+            let chars = Array(digits.prefix(6 - index))
+            for (offset, char) in chars.enumerated() {
+                code[index + offset] = String(char)
+            }
+            focusedField = min(index + chars.count, 5)
+
+            if isCodeComplete {
+                handleVerify()
+            }
+            return
+        }
+
         // Auto-advance to next field
-        if newValue.count == 1 && index < 5 {
+        if digits.count == 1 && index < 5 {
             focusedField = index + 1
         }
 
@@ -166,8 +177,8 @@ struct EmailVerificationView: View {
 
         Task {
             do {
-                _ = try await appState.authService.resendVerificationCode(email: email)
-                resetResendTimer()
+                let response = try await appState.authService.resendVerificationCode(email: email)
+                startResendTimer(cooldown: response.resendCooldown)
             } catch {
                 if let authError = error as? AuthError {
                     errorMessage = authError.errorDescription
@@ -179,8 +190,8 @@ struct EmailVerificationView: View {
         }
     }
 
-    private func startResendTimer() {
-        resendTimer = 180
+    private func startResendTimer(cooldown: Int? = nil) {
+        resendTimer = cooldown ?? resendCooldown
         timerActive = true
 
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
@@ -192,15 +203,11 @@ struct EmailVerificationView: View {
             }
         }
     }
-
-    private func resetResendTimer() {
-        startResendTimer()
-    }
 }
 
 #Preview {
     NavigationStack {
-        EmailVerificationView(email: "test@example.com")
+        EmailVerificationView(email: "test@example.com", resendCooldown: 180)
             .environmentObject(AppState())
     }
 }

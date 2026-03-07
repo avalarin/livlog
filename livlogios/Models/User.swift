@@ -95,9 +95,11 @@ enum AuthError: Error, LocalizedError {
 struct SendCodeResponse: Codable {
     let message: String
     let expiresIn: Int
+    let resendCooldown: Int
 
     enum CodingKeys: String, CodingKey {
         case message
         case expiresIn = "expires_in"
+        case resendCooldown = "resend_cooldown"
     }
 }

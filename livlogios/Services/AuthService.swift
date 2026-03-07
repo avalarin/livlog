@@ -149,22 +149,20 @@ class AuthService: ObservableObject {
 
     // MARK: - Sign in with Email
 
-    func sendVerificationCode(email: String) async throws -> Int {
+    func sendVerificationCode(email: String) async throws -> SendCodeResponse {
         do {
             let deviceId = UIDevice.current.identifierForVendor?.uuidString
-            let response = try await BackendService.shared.sendVerificationCode(email: email, deviceId: deviceId)
-            return response.expiresIn
+            return try await BackendService.shared.sendVerificationCode(email: email, deviceId: deviceId)
         } catch {
             self.error = error
             throw error
         }
     }
 
-    func resendVerificationCode(email: String) async throws -> Int {
+    func resendVerificationCode(email: String) async throws -> SendCodeResponse {
         do {
             let deviceId = UIDevice.current.identifierForVendor?.uuidString
-            let response = try await BackendService.shared.resendVerificationCode(email: email, deviceId: deviceId)
-            return response.expiresIn
+            return try await BackendService.shared.resendVerificationCode(email: email, deviceId: deviceId)
         } catch {
             self.error = error
             throw error

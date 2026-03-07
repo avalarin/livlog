@@ -355,10 +355,11 @@ func (r *UserRepository) CreateUserWithProvider(
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Create auth provider
+	// Create or reassign auth provider (handles case where provider existed for a soft-deleted user)
 	providerQuery := `
 		INSERT INTO user_auth_providers (user_id, provider, provider_user_id)
 		VALUES ($1, $2, $3)
+		ON CONFLICT ON CONSTRAINT uq_auth_provider DO UPDATE SET user_id = EXCLUDED.user_id
 	`
 
 	_, err = tx.Exec(ctx, providerQuery, user.ID, provider, providerUserID)
