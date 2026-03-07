@@ -23,7 +23,7 @@ Run these checks before doing anything:
 
 1. **Verify `gh` is available** — run `which gh`. If missing, stop and tell the user to install it.
 2. **Check for uncommitted changes** — run `git status --porcelain`. If there are uncommitted or untracked files, stop and tell the user what's pending. Don't proceed until the working tree is clean.
-3. **Get current branch** — run `git branch --show-current`. If on `main`, just push and skip PR creation. Tell the user: "You're on main, pushed directly. No PR created."
+3. **Get current branch** — run `git branch --show-current`. Note whether you're on `main` or a feature branch. If on `main`, you will skip PR creation (Step 5) but you MUST still run Steps 2-4 (push, monitor CI, handle failures).
 
 ### Step 2: Push to origin
 
@@ -86,6 +86,8 @@ If CI fails:
 If the user declines the fix, stop and report the current state.
 
 ### Step 5: Create Pull Request
+
+If on `main`, skip this step — tell the user: "Pushed directly to main. No PR created." and go to Step 6.
 
 Once CI passes (or was skipped), create the PR:
 
