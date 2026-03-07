@@ -206,11 +206,7 @@ struct CollectionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(collection.icon)
-                .font(.title2)
-                .frame(width: 44, height: 44)
-                .background(Color.accentColor.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+            CollectionIconView(iconRaw: collection.icon, colorRaw: collection.color)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(collection.name)
@@ -294,7 +290,10 @@ struct AddEditCollectionView: View {
     @EnvironmentObject private var appState: AppState
 
     @State private var name: String = ""
-    @State private var selectedIcon: String = "📁"
+    @State private var selectedIcon: CollectionIcon = .system("folder")
+    @State private var selectedColor: CollectionColor = .dodgerBlue
+    @State private var iconTab: IconTab = .system
+    @State private var emojiText: String = ""
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showError = false
@@ -305,11 +304,10 @@ struct AddEditCollectionView: View {
     @State private var selectedMember: CollectionMember?
     @State private var showingAddMember = false
 
-    private let emojiOptions = [
-        "📁", "🎬", "📚", "🎮", "🎵", "🎨", "🍿", "📺", "🎭", "🎪",
-        "✈️", "🌍", "🍽️", "☕️", "🏋️", "⚽️", "🎾", "🎯", "🎲", "🎸",
-        "📷", "💼", "🎓", "💡", "🔧", "🛠️", "🎁", "💎", "🌟", "✨"
-    ]
+    enum IconTab: String, CaseIterable {
+        case system = "Icons"
+        case emoji = "Emoji"
+    }
 
     private var isEditing: Bool {
         if case .edit = mode { return true }
@@ -349,22 +347,75 @@ struct AddEditCollectionView: View {
                 }
 
                 Section("Icon") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
-                        ForEach(emojiOptions, id: \.self) { emoji in
+                    Picker("", selection: $iconTab) {
+                        ForEach(IconTab.allCases, id: \.self) { tab in
+                            Text(tab.rawValue).tag(tab)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(isEditing && !isOwner)
+
+                    if iconTab == .system {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                            ForEach(CollectionIcon.allSystemIcons, id: \.self) { iconName in
+                                let isSelected = selectedIcon == .system(iconName)
+                                Button {
+                                    selectedIcon = .system(iconName)
+                                } label: {
+                                    Image(iconName)
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .foregroundStyle(selectedColor.color)
+                                        .padding(8)
+                                        .frame(width: 44, height: 44)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(isSelected ? selectedColor.color.opacity(0.2) : Color.clear)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(isSelected ? selectedColor.color : Color.clear, lineWidth: 2)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isEditing && !isOwner)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    } else {
+                        TextField("Enter emoji", text: $emojiText)
+                            .font(.title)
+                            .multilineTextAlignment(.center)
+                            .onChange(of: emojiText) { _, newValue in
+                                if !newValue.isEmpty {
+                                    let trimmed = String(newValue.prefix(1))
+                                    if trimmed != newValue {
+                                        emojiText = trimmed
+                                    }
+                                    selectedIcon = .emoji(trimmed)
+                                }
+                            }
+                            .disabled(isEditing && !isOwner)
+                    }
+                }
+
+                Section("Color") {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+                        ForEach(CollectionColor.allCases, id: \.self) { colorOption in
                             Button {
-                                selectedIcon = emoji
+                                selectedColor = colorOption
                             } label: {
-                                Text(emoji)
-                                    .font(.title)
-                                    .frame(width: 44, height: 44)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(selectedIcon == emoji ? Color.accentColor.opacity(0.2) : Color.clear)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(selectedIcon == emoji ? Color.accentColor : Color.clear, lineWidth: 2)
-                                    )
+                                Circle()
+                                    .fill(colorOption.color)
+                                    .frame(width: 36, height: 36)
+                                    .overlay {
+                                        if selectedColor == colorOption {
+                                            Image(systemName: "checkmark")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(.white)
+                                        }
+                                    }
                             }
                             .buttonStyle(.plain)
                             .disabled(isEditing && !isOwner)
@@ -381,8 +432,7 @@ struct AddEditCollectionView: View {
                         Spacer()
 
                         HStack(spacing: 8) {
-                            Text(selectedIcon)
-                                .font(.title3)
+                            CollectionIconView(icon: selectedIcon, color: selectedColor, size: 32)
                             Text(name.isEmpty ? "Collection Name" : name)
                                 .foregroundStyle(name.isEmpty ? .secondary : .primary)
                         }
@@ -422,7 +472,16 @@ struct AddEditCollectionView: View {
             .onAppear {
                 if case .edit(let collection) = mode {
                     name = collection.name
-                    selectedIcon = collection.icon
+                    let parsed = CollectionIcon(raw: collection.icon)
+                    selectedIcon = parsed
+                    selectedColor = CollectionColor(rawValue: collection.color) ?? .dodgerBlue
+                    switch parsed {
+                    case .system:
+                        iconTab = .system
+                    case .emoji(let emoji):
+                        iconTab = .emoji
+                        emojiText = emoji
+                    }
                 }
             }
             .task {
@@ -540,13 +599,15 @@ struct AddEditCollectionView: View {
 
     private func loadMembers(collectionID: String) async {
         isLoadingMembers = true
+        defer { isLoadingMembers = false }
         do {
             members = try await CollectionService.shared.getMembers(collectionID: collectionID)
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = "Failed to load members: \(error.localizedDescription)"
             showError = true
         }
-        isLoadingMembers = false
     }
 
     private func saveCollection() async {
@@ -554,11 +615,13 @@ struct AddEditCollectionView: View {
         errorMessage = nil
 
         do {
+            let iconRaw = selectedIcon.rawValue
+            let colorRaw = selectedColor.rawValue
             switch mode {
             case .add:
-                _ = try await CollectionService.shared.createCollection(name: name, icon: selectedIcon)
+                _ = try await CollectionService.shared.createCollection(name: name, icon: iconRaw, color: colorRaw)
             case .edit(let collection):
-                _ = try await CollectionService.shared.updateCollection(id: collection.id, name: name, icon: selectedIcon)
+                _ = try await CollectionService.shared.updateCollection(id: collection.id, name: name, icon: iconRaw, color: colorRaw)
             }
             isSaving = false
             dismiss()
@@ -803,6 +866,6 @@ struct EditMemberSheet: View {
 
 #Preview("Share Collection") {
     NavigationStack {
-        ShareCollectionSheet(collection: CollectionModel(id: "", name: "Preview", icon: ""))
+        ShareCollectionSheet(collection: CollectionModel(id: "", name: "Preview", icon: "system:folder"))
     }
 }

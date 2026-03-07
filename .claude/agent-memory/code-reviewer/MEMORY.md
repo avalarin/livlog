@@ -8,7 +8,7 @@
 
 - **[bug] Missing cancellation catch in async load helpers** — when a secondary async function (e.g. `loadMembers`) omits `catch is CancellationError`, a task cancellation (e.g. sheet dismissed mid-load) shows a spurious error alert. Apply the same pattern as `loadData`: `catch is CancellationError { return }` + `catch let urlError as URLError where urlError.code == .cancelled { return }` + move the loading flag reset into `defer`. Seen 2 times. NOTE: `loadData` in ContentView.swift now has both cancellation catches and `defer { isLoading = false }` — FIXED for this function. The pattern still needs checking in other load helpers.
   - Last seen: EntryDetailView.swift:269 (`isLoading = false` placed at end of function body instead of `defer`; if a future early-return is added the flag will stick)
-  - Also seen: CollectionsView.swift:541 (`loadMembers` has no cancellation catch; `isLoadingMembers = false` not in defer)
+  - Also seen: CollectionsView.swift:598 (`loadMembers` still has no cancellation catch; `isLoadingMembers = false` placed at end of function body instead of `defer`)
 
 - **[bug] `@State` seeded via `init` overwritten by `.task`/`.onAppear`** — initial value set in `init` is replaced on first appear when a network load unconditionally reassigns the same state. Either skip the load when state is already populated, or don't seed from `init`.
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -13,13 +14,48 @@ import (
 
 var (
 	ErrInvalidCollectionName = errors.New("collection name must be between 1 and 50 characters")
-	ErrInvalidIcon           = errors.New("icon must be between 1 and 20 characters")
+	ErrInvalidIcon           = errors.New("icon must start with 'system:' or 'emoji:' and be at most 50 characters")
+	ErrInvalidColor          = errors.New("invalid color value")
 	ErrCollectionHasEntries  = errors.New("cannot delete collection with entries")
 	ErrNotCollectionOwner    = errors.New("you must be the collection owner to perform this action")
 	ErrLastOwner             = repository.ErrLastOwner
 	ErrAlreadyMember         = repository.ErrAlreadyMember
 	ErrAlreadyHasCollections = errors.New("user already has collections")
 )
+
+var validSystemIcons = map[string]struct{}{
+	"bookmark":      {},
+	"music":         {},
+	"price-tag":     {},
+	"user":          {},
+	"male-user":     {},
+	"gift":          {},
+	"music-library": {},
+	"cymbals":       {},
+	"image":         {},
+	"music-record":  {},
+	"cameras":       {},
+	"albums":        {},
+	"flash-on":      {},
+	"radio-waves":   {},
+	"musical-note":  {},
+	"briefcase":     {},
+	"folder":        {},
+	"movie":         {},
+}
+
+var validColors = map[string]struct{}{
+	"dodger-blue":   {},
+	"dusty-grape":   {},
+	"straw-gold":    {},
+	"rosewood":      {},
+	"coral-glow":    {},
+	"vibrant-coral": {},
+	"vintage-grape": {},
+	"yellow-green":  {},
+	"granite":       {},
+	"verdigris":     {},
+}
 
 type CollectionService struct {
 	collectionRepo *repository.CollectionRepository
@@ -40,7 +76,7 @@ func NewCollectionService(
 func (s *CollectionService) CreateCollection(
 	ctx context.Context,
 	userID uuid.UUID,
-	name, icon string,
+	name, icon, color string,
 ) (*repository.Collection, error) {
 	// Validate name
 	name = strings.TrimSpace(name)
@@ -50,11 +86,17 @@ func (s *CollectionService) CreateCollection(
 
 	// Validate icon
 	icon = strings.TrimSpace(icon)
-	if len(icon) < 1 || len(icon) > 20 {
-		return nil, ErrInvalidIcon
+	if err := validateIcon(icon); err != nil {
+		return nil, err
 	}
 
-	return s.collectionRepo.CreateCollection(ctx, userID, name, icon)
+	// Validate color
+	color = strings.TrimSpace(color)
+	if err := validateColor(color); err != nil {
+		return nil, err
+	}
+
+	return s.collectionRepo.CreateCollection(ctx, userID, name, icon, color)
 }
 
 // GetCollectionsByUserID retrieves all collections for a user
@@ -79,7 +121,7 @@ func (s *CollectionService) UpdateCollection(
 	ctx context.Context,
 	id uuid.UUID,
 	userID uuid.UUID,
-	name, icon string,
+	name, icon, color string,
 ) (*repository.Collection, error) {
 	// Verify requester is owner
 	role, err := s.collectionRepo.GetUserRole(ctx, id, userID)
@@ -101,11 +143,17 @@ func (s *CollectionService) UpdateCollection(
 
 	// Validate icon
 	icon = strings.TrimSpace(icon)
-	if len(icon) < 1 || len(icon) > 20 {
-		return nil, ErrInvalidIcon
+	if err := validateIcon(icon); err != nil {
+		return nil, err
 	}
 
-	if _, err := s.collectionRepo.UpdateCollection(ctx, id, name, icon); err != nil {
+	// Validate color
+	color = strings.TrimSpace(color)
+	if err := validateColor(color); err != nil {
+		return nil, err
+	}
+
+	if _, err := s.collectionRepo.UpdateCollection(ctx, id, name, icon, color); err != nil {
 		return nil, err
 	}
 
@@ -211,6 +259,37 @@ func (s *CollectionService) UpdateShare(
 	}
 
 	return s.collectionRepo.UpdateCollectionShare(ctx, collectionID, targetUserID, newRole)
+}
+
+// validateIcon checks that the icon string uses a recognized prefix and a valid name/content.
+func validateIcon(icon string) error {
+	if len(icon) < 1 || len(icon) > 50 {
+		return ErrInvalidIcon
+	}
+	if strings.HasPrefix(icon, "system:") {
+		name := strings.TrimPrefix(icon, "system:")
+		if _, ok := validSystemIcons[name]; !ok {
+			return ErrInvalidIcon
+		}
+		return nil
+	}
+	if strings.HasPrefix(icon, "emoji:") {
+		content := strings.TrimPrefix(icon, "emoji:")
+		runeCount := utf8.RuneCountInString(content)
+		if runeCount < 1 || runeCount > 10 {
+			return ErrInvalidIcon
+		}
+		return nil
+	}
+	return ErrInvalidIcon
+}
+
+// validateColor checks that the color is one of the allowed values.
+func validateColor(color string) error {
+	if _, ok := validColors[color]; !ok {
+		return ErrInvalidColor
+	}
+	return nil
 }
 
 // CreateDefaultCollections creates default collections if user has none

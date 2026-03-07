@@ -41,6 +41,7 @@ struct CollectionModel: Codable, Identifiable {
     let id: String
     let name: String
     let icon: String
+    let color: String
     let entryCount: Int
     let memberCount: Int
     let myRole: CollectionRole
@@ -52,6 +53,7 @@ struct CollectionModel: Codable, Identifiable {
         case id
         case name
         case icon
+        case color
         case entryCount = "entry_count"
         case memberCount = "member_count"
         case myRole = "my_role"
@@ -64,6 +66,7 @@ struct CollectionModel: Codable, Identifiable {
         id: String,
         name: String,
         icon: String,
+        color: String = "dodger-blue",
         entryCount: Int = 0,
         memberCount: Int = 1,
         myRole: CollectionRole = .owner,
@@ -74,6 +77,7 @@ struct CollectionModel: Codable, Identifiable {
         self.id = id
         self.name = name
         self.icon = icon
+        self.color = color
         self.entryCount = entryCount
         self.memberCount = memberCount
         self.myRole = myRole
@@ -88,6 +92,7 @@ struct CollectionModel: Codable, Identifiable {
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         icon = try container.decode(String.self, forKey: .icon)
+        color = try container.decodeIfPresent(String.self, forKey: .color) ?? "dodger-blue"
         entryCount = try container.decodeIfPresent(Int.self, forKey: .entryCount) ?? 0
         memberCount = try container.decodeIfPresent(Int.self, forKey: .memberCount) ?? 1
         myRole = try container.decodeIfPresent(CollectionRole.self, forKey: .myRole) ?? .read
@@ -134,6 +139,7 @@ struct CollectionModel: Codable, Identifiable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(icon, forKey: .icon)
+        try container.encode(color, forKey: .color)
         try container.encode(entryCount, forKey: .entryCount)
         try container.encode(memberCount, forKey: .memberCount)
         try container.encode(myRole, forKey: .myRole)
@@ -447,7 +453,7 @@ struct MCPStatusResponse: Codable {
 
 #if DEBUG
 extension CollectionModel {
-    static let previewMyList = CollectionModel(id: "my-list", name: "My List", icon: "📋")
+    static let previewMyList = CollectionModel(id: "my-list", name: "My List", icon: "system:folder", color: "dodger-blue")
 
     static let previewCollections: [CollectionModel] = [previewMyList]
 }
