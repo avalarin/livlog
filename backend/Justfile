@@ -7,7 +7,7 @@ default:
 
 # Build the server binary
 build:
-    go build -o bin/server ./cmd/server
+    go build -ldflags="-X github.com/avalarin/livlog/backend/internal/version.Version=$(cat VERSION | tr -d '[:space:]') -X github.com/avalarin/livlog/backend/internal/version.Commit=$(git rev-parse --short HEAD)" -o bin/server ./cmd/server
 
 # Run tests
 test:

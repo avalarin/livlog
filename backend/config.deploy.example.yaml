@@ -1,0 +1,45 @@
+# Livlog Backend — Deploy Configuration Example
+#
+# Place this file as config.yaml inside the "livlog-data" Docker volume on the server.
+# The volume is mounted read-only into the container at /app/data.
+#
+# Environment variables with the LIVLOG_ prefix can still override any setting.
+# Example: LIVLOG_DATABASE_PASSWORD=secret overrides database.password
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  public_host: "grove.example.com"
+
+database:
+  host: "db-host.example.com"
+  port: 25061
+  name: "app_db"
+  user: "app_user"
+  password: "CHANGE_ME"
+  sslmode: "require"
+
+logging:
+  format: "json"
+
+jwt:
+  private_key_path: "/app/data/keys/private_key.pem"
+  public_key_path: "/app/data/keys/public_key.pem"
+  access_token_lifetime: 3600
+  refresh_token_lifetime: 2592000
+  issuer: "livlog-api"
+  audience: "livlog-app"
+
+apple:
+  bundle_id: "net.avalarin.livlog"
+
+openrouter:
+  api_key: "sk-CHANGE_ME"
+  base_url: "https://openrouter.ai/api/v1/chat/completions"
+  model: "perplexity/sonar"
+
+ratelimit:
+  ai_search_basic_limit: 5
+  ai_search_pro_limit: 50
+  ai_search_unlimited_limit: 0
+  ai_search_period: "24h"

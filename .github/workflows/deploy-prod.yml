@@ -1,0 +1,104 @@
+name: Deploy Prod
+
+on:
+  workflow_run:
+    workflows:
+      - Build
+    types:
+      - completed
+    # Triggers when Build completes on a tag push (workflow_run does not support tags filter directly,
+    # so we filter by head_branch matching v* in the job condition below)
+
+jobs:
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+    # Only run when the triggering workflow succeeded and was triggered by a tag push
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+
+    steps:
+      - name: Production deployment placeholder
+        run: echo "Production deployment not yet configured"
+
+      # TODO: Uncomment and configure when production server is ready.
+      #
+      # Prerequisites on the production server:
+      #   1. Docker installed
+      #   2. Docker volume "livlog-data" created and populated (see docs/deploy.md):
+      #      - config.yaml (from backend/config.deploy.example.yaml)
+      #      - keys/private_key.pem, keys/public_key.pem (JWT RSA keys)
+      #      - certs/ca-certificate.crt (database CA cert, if needed)
+      #
+      # Secrets required:
+      #   PROD_SSH_HOST  — production server IP or hostname
+      #   PROD_SSH_USER  — SSH user on the production server
+      #   PROD_SSH_KEY   — SSH private key for the production server
+      #   GHCR_PAT       — GitHub Personal Access Token with read:packages scope
+      #
+      # - name: Deploy via SSH
+      #   uses: appleboy/ssh-action@v1
+      #   with:
+      #     host: ${{ secrets.PROD_SSH_HOST }}
+      #     username: ${{ secrets.PROD_SSH_USER }}
+      #     key: ${{ secrets.PROD_SSH_KEY }}
+      #     envs: GHCR_PAT,IMAGE_TAG
+      #     script: |
+      #       set -e
+      #       IMAGE_TAG="${IMAGE_TAG:-latest}"
+      #
+      #       VOLUME_NAME="livlog-data"
+      #       if ! docker volume inspect "$VOLUME_NAME" > /dev/null 2>&1; then
+      #         echo "ERROR: Docker volume '$VOLUME_NAME' not found"
+      #         exit 1
+      #       fi
+      #
+      #       echo "$GHCR_PAT" | docker login ghcr.io -u avalarin --password-stdin
+      #       docker pull ghcr.io/avalarin/livlog:$IMAGE_TAG
+      #
+      #       PREVIOUS_IMAGE=$(docker inspect --format='{{.Image}}' livlog-backend 2>/dev/null || true)
+      #
+      #       docker stop livlog-backend 2>/dev/null || true
+      #       docker rm livlog-backend 2>/dev/null || true
+      #
+      #       docker run -d \
+      #         --name livlog-backend \
+      #         --restart unless-stopped \
+      #         -p 8080:8080 \
+      #         -v livlog-data:/app/data:ro \
+      #         ghcr.io/avalarin/livlog:$IMAGE_TAG \
+      #         -config /app/data/config.yaml -migrations /app/migrations
+      #
+      #       echo "Waiting for health check..."
+      #       for i in 1 2 3 4 5; do
+      #         sleep 3
+      #         if docker exec livlog-backend wget -qO- http://localhost:8080/api/v1/health 2>/dev/null; then
+      #           echo "Health check passed"
+      #           break
+      #         fi
+      #         if [ "$i" -eq 5 ]; then
+      #           echo "ERROR: Health check failed after 5 attempts"
+      #           docker logs --tail 50 livlog-backend
+      #           if [ -n "$PREVIOUS_IMAGE" ] && docker image inspect "$PREVIOUS_IMAGE" > /dev/null 2>&1; then
+      #             echo "Rolling back to $PREVIOUS_IMAGE"
+      #             docker stop livlog-backend 2>/dev/null || true
+      #             docker rm livlog-backend 2>/dev/null || true
+      #             docker run -d --name livlog-backend --restart unless-stopped \
+      #               -p 8080:8080 \
+      #               -v livlog-data:/app/data:ro \
+      #               "$PREVIOUS_IMAGE" \
+      #               -config /app/data/config.yaml -migrations /app/migrations
+      #           else
+      #             echo "WARNING: No previous image available for rollback"
+      #           fi
+      #           exit 1
+      #         fi
+      #         echo "Attempt $i failed, retrying..."
+      #       done
+      #
+      #       docker image prune -f
+      #   env:
+      #     GHCR_PAT: ${{ secrets.GHCR_PAT }}
+      #     IMAGE_TAG: ${{ github.event.workflow_run.head_branch }}

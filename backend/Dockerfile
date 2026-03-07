@@ -13,9 +13,13 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Build args for versioning
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
+    -ldflags="-w -s -X github.com/avalarin/livlog/backend/internal/version.Version=${APP_VERSION} -X github.com/avalarin/livlog/backend/internal/version.Commit=${APP_COMMIT}" \
     -o /app/server \
     ./cmd/server
 
@@ -25,8 +29,8 @@ FROM alpine:3.19
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata
 
-# Create non-root user
-RUN addgroup -S livlog && adduser -S livlog -G livlog
+# Create non-root user with fixed UID/GID so volume permissions can be set on the host
+RUN addgroup -S -g 1100 livlog && adduser -S -u 1100 -G livlog livlog
 
 WORKDIR /app
 
@@ -35,9 +39,6 @@ COPY --from=builder /app/server .
 
 # Copy migrations
 COPY --from=builder /app/migrations ./migrations
-
-# Copy config
-COPY --from=builder /app/config.yaml .
 
 # Set ownership
 RUN chown -R livlog:livlog /app
@@ -54,4 +55,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Run the server
 ENTRYPOINT ["/app/server"]
-CMD ["-config", "/app/config.yaml", "-migrations", "/app/migrations"]
+CMD ["-migrations", "/app/migrations"]
