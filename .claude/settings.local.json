@@ -18,7 +18,8 @@
       "Bash(xcrun simctl:*)",
       "Bash(git diff:*)",
       "Bash(git rebase:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git:*)"
     ]
   },
   "hooks": {
