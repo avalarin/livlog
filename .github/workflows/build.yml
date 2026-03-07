@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     branches:
-      - main
+      - '**'
     paths:
       - 'backend/**'
       - '.github/workflows/build.yml'
@@ -12,13 +12,12 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    name: Lint, Test, and Push Docker Image
+  lint-and-test:
+    name: Lint and Test
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
-      packages: write
 
     steps:
       - name: Checkout code
@@ -39,6 +38,20 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: go test -race ./...
+
+  push-image:
+    name: Push Docker Image
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Read version
         id: version
