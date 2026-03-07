@@ -23,6 +23,7 @@ type Collection struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Name        string    `json:"name"`
 	Icon        string    `json:"icon"`
+	Color       string    `json:"color"`
 	EntryCount  int       `json:"entry_count"`
 	MemberCount int       `json:"member_count"`
 	MyRole      string    `json:"my_role"`
@@ -52,7 +53,7 @@ func NewCollectionRepository(db *pgxpool.Pool) *CollectionRepository {
 func (r *CollectionRepository) CreateCollection(
 	ctx context.Context,
 	userID uuid.UUID,
-	name, icon string,
+	name, icon, color string,
 ) (*Collection, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -61,17 +62,18 @@ func (r *CollectionRepository) CreateCollection(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	insertQuery := `
-		INSERT INTO collections (user_id, name, icon)
-		VALUES ($1, $2, $3)
-		RETURNING id, user_id, name, icon, created_at, updated_at
+		INSERT INTO collections (user_id, name, icon, color)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, user_id, name, icon, color, created_at, updated_at
 	`
 
 	var collection Collection
-	err = tx.QueryRow(ctx, insertQuery, userID, name, icon).Scan(
+	err = tx.QueryRow(ctx, insertQuery, userID, name, icon, color).Scan(
 		&collection.ID,
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
+		&collection.Color,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
 	)
@@ -106,7 +108,7 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 	userID uuid.UUID,
 ) ([]*Collection, error) {
 	query := `
-		SELECT c.id, c.user_id, c.name, c.icon, COUNT(DISTINCT e.id) AS entry_count,
+		SELECT c.id, c.user_id, c.name, c.icon, c.color, COUNT(DISTINCT e.id) AS entry_count,
 		       (SELECT COUNT(*) FROM collection_shares cs2 WHERE cs2.collection_id = c.id) AS member_count,
 		       cs.permission_level AS my_role, c.created_at, c.updated_at,
 		       CASE WHEN c.user_id = $1 THEN NULL
@@ -133,6 +135,7 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 			&collection.UserID,
 			&collection.Name,
 			&collection.Icon,
+			&collection.Color,
 			&collection.EntryCount,
 			&collection.MemberCount,
 			&collection.MyRole,
@@ -160,7 +163,7 @@ func (r *CollectionRepository) GetCollectionByID(
 	userID uuid.UUID,
 ) (*Collection, error) {
 	query := `
-		SELECT c.id, c.user_id, c.name, c.icon, COUNT(DISTINCT e.id) AS entry_count,
+		SELECT c.id, c.user_id, c.name, c.icon, c.color, COUNT(DISTINCT e.id) AS entry_count,
 		       (SELECT COUNT(*) FROM collection_shares cs2 WHERE cs2.collection_id = c.id) AS member_count,
 		       cs.permission_level AS my_role, c.created_at, c.updated_at
 		FROM collections c
@@ -176,6 +179,7 @@ func (r *CollectionRepository) GetCollectionByID(
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
+		&collection.Color,
 		&collection.EntryCount,
 		&collection.MemberCount,
 		&collection.MyRole,
@@ -391,25 +395,26 @@ func (r *CollectionRepository) UpdateCollectionShare(
 	return tx.Commit(ctx)
 }
 
-// UpdateCollection updates a collection's name and/or icon.
+// UpdateCollection updates a collection's name, icon, and/or color.
 func (r *CollectionRepository) UpdateCollection(
 	ctx context.Context,
 	id uuid.UUID,
-	name, icon string,
+	name, icon, color string,
 ) (*Collection, error) {
 	query := `
 		UPDATE collections
-		SET name = $2, icon = $3, updated_at = NOW()
+		SET name = $2, icon = $3, color = $4, updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, user_id, name, icon, created_at, updated_at
+		RETURNING id, user_id, name, icon, color, created_at, updated_at
 	`
 
 	var collection Collection
-	err := r.db.QueryRow(ctx, query, id, name, icon).Scan(
+	err := r.db.QueryRow(ctx, query, id, name, icon, color).Scan(
 		&collection.ID,
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
+		&collection.Color,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
 	)
@@ -428,7 +433,7 @@ func (r *CollectionRepository) CreateDefaultCollections(
 	ctx context.Context,
 	userID uuid.UUID,
 ) ([]*Collection, error) {
-	collection, err := r.CreateCollection(ctx, userID, "My List", "📋")
+	collection, err := r.CreateCollection(ctx, userID, "My List", "system:folder", "dodger-blue")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create default collection: %w", err)
 	}

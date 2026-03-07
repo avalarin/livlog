@@ -557,8 +557,7 @@ struct CollectionButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Text(collection.icon)
-                    .font(.title2)
+                CollectionIconView(iconRaw: collection.icon, colorRaw: collection.color, size: 32)
                 Text(collection.name)
                     .font(.caption2)
                     .fontWeight(.medium)

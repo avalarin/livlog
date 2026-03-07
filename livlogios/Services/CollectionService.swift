@@ -42,13 +42,14 @@ actor CollectionService {
 
     // MARK: - Create Collection
 
-    func createCollection(name: String, icon: String) async throws -> CollectionModel {
+    func createCollection(name: String, icon: String, color: String) async throws -> CollectionModel {
         struct Request: Codable {
             let name: String
             let icon: String
+            let color: String
         }
 
-        let request = Request(name: name, icon: icon)
+        let request = Request(name: name, icon: icon, color: color)
         let bodyData = try encoder.encode(request)
 
         let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
@@ -73,13 +74,14 @@ actor CollectionService {
 
     // MARK: - Update Collection
 
-    func updateCollection(id: String, name: String, icon: String) async throws -> CollectionModel {
+    func updateCollection(id: String, name: String, icon: String, color: String) async throws -> CollectionModel {
         struct Request: Codable {
             let name: String
             let icon: String
+            let color: String
         }
 
-        let request = Request(name: name, icon: icon)
+        let request = Request(name: name, icon: icon, color: color)
         let bodyData = try encoder.encode(request)
 
         let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(

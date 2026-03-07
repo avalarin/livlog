@@ -39,14 +39,16 @@ func (h *CollectionHandler) RegisterRoutes(r chi.Router) {
 }
 
 type createCollectionRequest struct {
-	Name string `json:"name"`
-	Icon string `json:"icon"`
+	Name  string `json:"name"`
+	Icon  string `json:"icon"`
+	Color string `json:"color"`
 }
 
 type collectionResponse struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
 	Icon        string  `json:"icon"`
+	Color       string  `json:"color"`
 	EntryCount  int     `json:"entry_count"`
 	MemberCount int     `json:"member_count"`
 	MyRole      string  `json:"my_role"`
@@ -117,9 +119,9 @@ func (h *CollectionHandler) CreateCollection(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	collection, err := h.collectionService.CreateCollection(r.Context(), uid, req.Name, req.Icon)
+	collection, err := h.collectionService.CreateCollection(r.Context(), uid, req.Name, req.Icon, req.Color)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidCollectionName) || errors.Is(err, service.ErrInvalidIcon) {
+		if errors.Is(err, service.ErrInvalidCollectionName) || errors.Is(err, service.ErrInvalidIcon) || errors.Is(err, service.ErrInvalidColor) {
 			respondWithError(h.log, w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
@@ -220,7 +222,7 @@ func (h *CollectionHandler) UpdateCollection(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	collection, err := h.collectionService.UpdateCollection(r.Context(), cid, uid, req.Name, req.Icon)
+	collection, err := h.collectionService.UpdateCollection(r.Context(), cid, uid, req.Name, req.Icon, req.Color)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
 			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
@@ -230,7 +232,7 @@ func (h *CollectionHandler) UpdateCollection(w http.ResponseWriter, r *http.Requ
 			respondWithError(h.log, w, http.StatusForbidden, err.Error(), err)
 			return
 		}
-		if errors.Is(err, service.ErrInvalidCollectionName) || errors.Is(err, service.ErrInvalidIcon) {
+		if errors.Is(err, service.ErrInvalidCollectionName) || errors.Is(err, service.ErrInvalidIcon) || errors.Is(err, service.ErrInvalidColor) {
 			respondWithError(h.log, w, http.StatusBadRequest, err.Error(), err)
 			return
 		}
@@ -490,6 +492,7 @@ func mapCollectionToResponse(c *repository.Collection) collectionResponse {
 		ID:          c.ID.String(),
 		Name:        c.Name,
 		Icon:        c.Icon,
+		Color:       c.Color,
 		EntryCount:  c.EntryCount,
 		MemberCount: c.MemberCount,
 		MyRole:      c.MyRole,
