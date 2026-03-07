@@ -8,6 +8,7 @@
 import AuthenticationServices
 import Combine
 import Foundation
+import UIKit
 
 @MainActor
 class AuthService: ObservableObject {
@@ -150,7 +151,8 @@ class AuthService: ObservableObject {
 
     func sendVerificationCode(email: String) async throws -> Int {
         do {
-            let response = try await BackendService.shared.sendVerificationCode(email: email)
+            let deviceId = UIDevice.current.identifierForVendor?.uuidString
+            let response = try await BackendService.shared.sendVerificationCode(email: email, deviceId: deviceId)
             return response.expiresIn
         } catch {
             self.error = error
@@ -160,7 +162,8 @@ class AuthService: ObservableObject {
 
     func resendVerificationCode(email: String) async throws -> Int {
         do {
-            let response = try await BackendService.shared.resendVerificationCode(email: email)
+            let deviceId = UIDevice.current.identifierForVendor?.uuidString
+            let response = try await BackendService.shared.resendVerificationCode(email: email, deviceId: deviceId)
             return response.expiresIn
         } catch {
             self.error = error

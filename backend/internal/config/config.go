@@ -15,6 +15,7 @@ type Config struct {
 	Apple      AppleConfig      `mapstructure:"apple"`
 	OpenRouter OpenRouterConfig `mapstructure:"openrouter"`
 	RateLimit  RateLimitConfig  `mapstructure:"ratelimit"`
+	Email      EmailConfig      `mapstructure:"email"`
 }
 
 type ServerConfig struct {
@@ -53,6 +54,14 @@ type OpenRouterConfig struct {
 	APIKey  string `mapstructure:"api_key"`
 	BaseURL string `mapstructure:"base_url"`
 	Model   string `mapstructure:"model"`
+}
+
+type EmailConfig struct {
+	Enabled         bool   `mapstructure:"enabled"`
+	APIKey          string `mapstructure:"api_key"`
+	FromAddress     string `mapstructure:"from_address"`
+	ResendCooldown  string `mapstructure:"resend_cooldown"` // duration string like "180s"
+	MaxCodesPerHour int    `mapstructure:"max_codes_per_hour"`
 }
 
 type RateLimitConfig struct {
@@ -128,6 +137,10 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("ratelimit.ai_search_pro_limit", 50)
 	v.SetDefault("ratelimit.ai_search_unlimited_limit", 0) // 0 means no limit
 	v.SetDefault("ratelimit.ai_search_period", "24h")
+	v.SetDefault("email.enabled", false)
+	v.SetDefault("email.from_address", "noreply@livlog.net")
+	v.SetDefault("email.resend_cooldown", "180s")
+	v.SetDefault("email.max_codes_per_hour", 5)
 
 	// Read config file
 	if configPath != "" {

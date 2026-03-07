@@ -17,7 +17,7 @@ struct EmailVerificationView: View {
     @FocusState private var focusedField: Int?
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var resendTimer: Int = 60
+    @State private var resendTimer: Int = 180
     @State private var timerActive = true
 
     var body: some View {
@@ -110,7 +110,7 @@ struct EmailVerificationView: View {
     private func handleCodeInput(at index: Int, oldValue: String, newValue: String) {
         // Only keep last character
         if newValue.count > 1 {
-            code[index] = String(newValue.last!)
+            code[index] = String(newValue.suffix(1))
         }
 
         // Only allow digits
@@ -180,7 +180,7 @@ struct EmailVerificationView: View {
     }
 
     private func startResendTimer() {
-        resendTimer = 60
+        resendTimer = 180
         timerActive = true
 
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in

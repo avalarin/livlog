@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"regexp"
 	"time"
 
@@ -11,8 +13,7 @@ import (
 )
 
 const (
-	// HardcodedVerificationCode is the verification code used in MVP
-	// In production, this should be replaced with a randomly generated code
+	// HardcodedVerificationCode is the verification code used when email sending is disabled
 	HardcodedVerificationCode = "000000"
 
 	// VerificationCodeExpiry is the time window for code verification
@@ -31,39 +32,62 @@ var (
 )
 
 type EmailAuthService struct {
-	userRepo    *repository.UserRepository
-	codeRepo    *repository.VerificationCodeRepository
-	jwtService  *JWTService
-	rateLimiter *RateLimiter
+	userRepo        *repository.UserRepository
+	codeRepo        *repository.VerificationCodeRepository
+	attemptRepo     *repository.VerificationAttemptRepository
+	jwtService      *JWTService
+	emailSender     *EmailSender
+	resendCooldown  time.Duration
+	maxCodesPerHour int
 }
 
 func NewEmailAuthService(
 	userRepo *repository.UserRepository,
 	codeRepo *repository.VerificationCodeRepository,
+	attemptRepo *repository.VerificationAttemptRepository,
 	jwtService *JWTService,
-	rateLimiter *RateLimiter,
+	emailSender *EmailSender,
+	resendCooldown time.Duration,
+	maxCodesPerHour int,
 ) *EmailAuthService {
 	return &EmailAuthService{
-		userRepo:    userRepo,
-		codeRepo:    codeRepo,
-		jwtService:  jwtService,
-		rateLimiter: rateLimiter,
+		userRepo:        userRepo,
+		codeRepo:        codeRepo,
+		attemptRepo:     attemptRepo,
+		jwtService:      jwtService,
+		emailSender:     emailSender,
+		resendCooldown:  resendCooldown,
+		maxCodesPerHour: maxCodesPerHour,
 	}
 }
 
-// SendVerificationCode generates and stores a verification code for the email
-// For MVP, always uses hardcoded "000000"
-func (s *EmailAuthService) SendVerificationCode(ctx context.Context, email string) error {
+// SendVerificationCode generates and stores a verification code for the email, then sends it
+func (s *EmailAuthService) SendVerificationCode(ctx context.Context, email, deviceID, ipAddress string) error {
 	// Validate email format
 	if !isValidEmail(email) {
 		return ErrInvalidEmail
 	}
 
-	// Generate code (hardcoded for MVP)
-	code := HardcodedVerificationCode
+	// Check rate limit
+	if err := s.checkRateLimit(ctx, email, deviceID, ipAddress); err != nil {
+		return err
+	}
+
+	// Generate code: random if email is enabled, hardcoded otherwise
+	var code string
+	if s.emailSender.IsEnabled() {
+		code = generateVerificationCode()
+	} else {
+		code = HardcodedVerificationCode
+	}
 
 	// Calculate expiry time
 	expiresAt := time.Now().Add(VerificationCodeExpiry)
+
+	// Record attempt in DB first (consumes rate-limit window regardless of outcome)
+	if err := s.attemptRepo.RecordAttempt(ctx, email, deviceID, ipAddress); err != nil {
+		return fmt.Errorf("failed to record verification attempt: %w", err)
+	}
 
 	// Create verification code (automatically invalidates previous codes)
 	_, err := s.codeRepo.CreateVerificationCode(ctx, email, code, expiresAt)
@@ -71,27 +95,17 @@ func (s *EmailAuthService) SendVerificationCode(ctx context.Context, email strin
 		return fmt.Errorf("failed to create verification code: %w", err)
 	}
 
-	// In production, send email here
-	// emailService.SendVerificationEmail(email, code)
+	// Send email
+	if err := s.emailSender.SendVerificationCode(ctx, email, code); err != nil {
+		return fmt.Errorf("failed to send verification email: %w", err)
+	}
 
 	return nil
 }
 
 // ResendVerificationCode resends verification code with rate limiting
-func (s *EmailAuthService) ResendVerificationCode(ctx context.Context, email string) error {
-	// Validate email format
-	if !isValidEmail(email) {
-		return ErrInvalidEmail
-	}
-
-	// Check rate limit (1 request per minute per email)
-	rateLimitKey := fmt.Sprintf("resend:%s", email)
-	if !s.rateLimiter.Allow(rateLimitKey) {
-		return ErrRateLimitExceeded
-	}
-
-	// Send new verification code
-	return s.SendVerificationCode(ctx, email)
+func (s *EmailAuthService) ResendVerificationCode(ctx context.Context, email, deviceID, ipAddress string) error {
+	return s.SendVerificationCode(ctx, email, deviceID, ipAddress)
 }
 
 // VerifyCode verifies the code and returns auth response
@@ -164,10 +178,41 @@ func (s *EmailAuthService) VerifyCode(ctx context.Context, email, code string) (
 	}, nil
 }
 
-// GetRetryAfter returns seconds until next resend is allowed
-func (s *EmailAuthService) GetRetryAfter(email string) int {
-	rateLimitKey := fmt.Sprintf("resend:%s", email)
-	return s.rateLimiter.GetRetryAfter(rateLimitKey)
+// GetRetryAfter returns the configured cooldown in seconds
+func (s *EmailAuthService) GetRetryAfter() int {
+	return int(s.resendCooldown.Seconds())
+}
+
+// checkRateLimit checks both the cooldown and hourly limits
+func (s *EmailAuthService) checkRateLimit(ctx context.Context, email, deviceID, ipAddress string) error {
+	// Check cooldown (3 min between attempts from same email/device/ip)
+	hasRecent, err := s.attemptRepo.HasRecentAttempt(ctx, email, deviceID, ipAddress, s.resendCooldown)
+	if err != nil {
+		return fmt.Errorf("failed to check rate limit: %w", err)
+	}
+	if hasRecent {
+		return ErrRateLimitExceeded
+	}
+
+	// Check hourly limit
+	count, err := s.attemptRepo.CountRecentAttempts(ctx, email, time.Hour)
+	if err != nil {
+		return fmt.Errorf("failed to count attempts: %w", err)
+	}
+	if count >= s.maxCodesPerHour {
+		return ErrRateLimitExceeded
+	}
+
+	return nil
+}
+
+// generateVerificationCode generates a cryptographically random 6-digit code
+func generateVerificationCode() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
+	return fmt.Sprintf("%06d", n.Int64())
 }
 
 // Helper functions

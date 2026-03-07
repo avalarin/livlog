@@ -1,0 +1,75 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"go.uber.org/zap"
+)
+
+type EmailSender struct {
+	enabled     bool
+	apiKey      string
+	fromAddress string
+	log         *zap.Logger
+}
+
+func NewEmailSender(enabled bool, apiKey string, fromAddress string, log *zap.Logger) *EmailSender {
+	return &EmailSender{
+		enabled:     enabled,
+		apiKey:      apiKey,
+		fromAddress: fromAddress,
+		log:         log,
+	}
+}
+
+func (s *EmailSender) SendVerificationCode(ctx context.Context, email string, code string) error {
+	if !s.enabled {
+		s.log.Info("email sending disabled, skipping", zap.String("email", email), zap.String("code", code))
+		return nil
+	}
+
+	return s.sendViaResend(ctx, email, code)
+}
+
+func (s *EmailSender) IsEnabled() bool {
+	return s.enabled
+}
+
+func (s *EmailSender) sendViaResend(ctx context.Context, toEmail string, code string) error {
+	payload := map[string]interface{}{
+		"from":    s.fromAddress,
+		"to":      []string{toEmail},
+		"subject": "Your Grove verification code",
+		"text":    fmt.Sprintf("Your verification code is: %s\n\nThis code will expire in 5 minutes.\n\nIf you didn't request this code, you can safely ignore this email.", code),
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal email payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.resend.com/emails", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("resend API error: status %d", resp.StatusCode)
+	}
+
+	s.log.Info("verification email sent", zap.String("to", toEmail))
+	return nil
+}

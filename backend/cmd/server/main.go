@@ -66,6 +66,7 @@ func main() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db.Pool)
 	codeRepo := repository.NewVerificationCodeRepository(db.Pool)
+	attemptRepo := repository.NewVerificationAttemptRepository(db.Pool)
 	collectionRepo := repository.NewCollectionRepository(db.Pool)
 	entryRepo := repository.NewEntryRepository(db.Pool)
 	typeRepo := repository.NewTypeRepository(db.Pool)
@@ -94,11 +95,22 @@ func main() {
 
 	authService := service.NewAuthService(userRepo, appleVerifier, jwtService)
 
-	// Initialize rate limiter for email auth (60 second window)
-	rateLimiter := service.NewRateLimiter(60 * time.Second)
+	// Parse email resend cooldown duration
+	resendCooldown, err := time.ParseDuration(cfg.Email.ResendCooldown)
+	if err != nil {
+		log.Fatal("failed to parse email.resend_cooldown", zap.Error(err))
+	}
+
+	// Validate email config
+	if cfg.Email.Enabled && cfg.Email.APIKey == "" {
+		log.Fatal("email.enabled is true but email.api_key is not set")
+	}
+
+	// Initialize email sender
+	emailSender := service.NewEmailSender(cfg.Email.Enabled, cfg.Email.APIKey, cfg.Email.FromAddress, log)
 
 	// Initialize email auth service
-	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, jwtService, rateLimiter)
+	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtService, emailSender, resendCooldown, cfg.Email.MaxCodesPerHour)
 
 	// Initialize collection, entry, and type services
 	collectionService := service.NewCollectionService(collectionRepo, userRepo)
@@ -172,7 +184,7 @@ func main() {
 		})
 	})
 
-	// Start cleanup goroutine for expired verification codes and rate limiter
+	// Start cleanup goroutine for expired verification codes and old verification attempts
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -180,15 +192,20 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				// Cleanup rate limiter
-				rateLimiter.Cleanup()
-
 				// Cleanup expired verification codes (older than 24 hours)
 				deleted, err := codeRepo.CleanupExpiredCodes(ctx, 24*time.Hour)
 				if err != nil {
 					log.Error("failed to cleanup verification codes", zap.Error(err))
 				} else if deleted > 0 {
 					log.Info("cleaned up verification codes", zap.Int64("deleted", deleted))
+				}
+
+				// Cleanup old verification attempts (older than 24 hours)
+				deletedAttempts, err := attemptRepo.CleanupOldAttempts(ctx, 24*time.Hour)
+				if err != nil {
+					log.Error("failed to cleanup verification attempts", zap.Error(err))
+				} else if deletedAttempts > 0 {
+					log.Info("cleaned up verification attempts", zap.Int64("deleted", deletedAttempts))
 				}
 			case <-ctx.Done():
 				return

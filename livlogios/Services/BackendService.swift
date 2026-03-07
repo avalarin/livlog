@@ -202,8 +202,8 @@ actor BackendService {
 
     // MARK: - Email Auth Endpoints
 
-    func sendVerificationCode(email: String) async throws -> SendCodeResponse {
-        let requestBody = SendCodeRequest(email: email)
+    func sendVerificationCode(email: String, deviceId: String?) async throws -> SendCodeResponse {
+        let requestBody = SendCodeRequest(email: email, deviceId: deviceId)
         let bodyData = try encoder.encode(requestBody)
 
         let (data, _) = try await makeRequest(
@@ -216,8 +216,8 @@ actor BackendService {
         return try decoder.decode(SendCodeResponse.self, from: data)
     }
 
-    func resendVerificationCode(email: String) async throws -> SendCodeResponse {
-        let requestBody = ResendCodeRequest(email: email)
+    func resendVerificationCode(email: String, deviceId: String?) async throws -> SendCodeResponse {
+        let requestBody = ResendCodeRequest(email: email, deviceId: deviceId)
         let bodyData = try encoder.encode(requestBody)
 
         let (data, _) = try await makeRequest(
@@ -284,10 +284,22 @@ private struct ErrorResponse: Codable {
 
 private struct SendCodeRequest: Codable {
     let email: String
+    let deviceId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case email
+        case deviceId = "device_id"
+    }
 }
 
 private struct ResendCodeRequest: Codable {
     let email: String
+    let deviceId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case email
+        case deviceId = "device_id"
+    }
 }
 
 private struct VerifyCodeRequest: Codable {

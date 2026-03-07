@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -147,12 +148,19 @@ func (h *AuthHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 // Email Authentication Handlers
 
 type sendCodeRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	DeviceID string `json:"device_id"`
 }
 
 type sendCodeResponse struct {
 	Message   string `json:"message"`
 	ExpiresIn int    `json:"expires_in"`
+}
+
+type rateLimitErrorResponse struct {
+	Error   string         `json:"error"`
+	Message string         `json:"message"`
+	Details map[string]int `json:"details"`
 }
 
 func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Request) {
@@ -167,9 +175,19 @@ func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.emailAuthService.SendVerificationCode(r.Context(), req.Email); err != nil {
+	if err := h.emailAuthService.SendVerificationCode(r.Context(), req.Email, req.DeviceID, getClientIP(r)); err != nil {
 		if errors.Is(err, service.ErrInvalidEmail) {
 			respondWithError(h.log, w, http.StatusBadRequest, "Invalid email format", err)
+			return
+		}
+		if errors.Is(err, service.ErrRateLimitExceeded) {
+			retryAfter := h.emailAuthService.GetRetryAfter()
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			respondWithJSON(h.log, w, http.StatusTooManyRequests, rateLimitErrorResponse{
+				Error:   "RATE_LIMIT_EXCEEDED",
+				Message: "Please wait before requesting another code",
+				Details: map[string]int{"retry_after": retryAfter},
+			})
 			return
 		}
 		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to send verification code", err)
@@ -183,7 +201,8 @@ func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Reques
 }
 
 type resendCodeRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	DeviceID string `json:"device_id"`
 }
 
 func (h *AuthHandler) ResendVerificationCode(w http.ResponseWriter, r *http.Request) {
@@ -198,28 +217,19 @@ func (h *AuthHandler) ResendVerificationCode(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.emailAuthService.ResendVerificationCode(r.Context(), req.Email); err != nil {
+	if err := h.emailAuthService.ResendVerificationCode(r.Context(), req.Email, req.DeviceID, getClientIP(r)); err != nil {
 		if errors.Is(err, service.ErrInvalidEmail) {
 			respondWithError(h.log, w, http.StatusBadRequest, "Invalid email format", err)
 			return
 		}
 		if errors.Is(err, service.ErrRateLimitExceeded) {
-			retryAfter := h.emailAuthService.GetRetryAfter(req.Email)
+			retryAfter := h.emailAuthService.GetRetryAfter()
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-
-			type rateLimitError struct {
-				Error   string         `json:"error"`
-				Message string         `json:"message"`
-				Details map[string]int `json:"details"`
-			}
-
-			resp := rateLimitError{
+			respondWithJSON(h.log, w, http.StatusTooManyRequests, rateLimitErrorResponse{
 				Error:   "RATE_LIMIT_EXCEEDED",
 				Message: "Please wait before requesting another code",
 				Details: map[string]int{"retry_after": retryAfter},
-			}
-
-			respondWithJSON(h.log, w, http.StatusTooManyRequests, resp)
+			})
 			return
 		}
 		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to resend verification code", err)
@@ -306,6 +316,16 @@ func respondWithError(log *zap.Logger, w http.ResponseWriter, code int, message 
 	}
 
 	respondWithJSON(log, w, code, resp)
+}
+
+func getClientIP(r *http.Request) string {
+	// chi's RealIP middleware sets RemoteAddr to the real IP,
+	// but it may still include a port suffix
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func respondWithJSON(log *zap.Logger, w http.ResponseWriter, code int, payload interface{}) {
