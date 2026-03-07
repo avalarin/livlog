@@ -16,38 +16,37 @@ linters:
     - misspell
     - unconvert
     - unparam
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    misspell:
+      locale: US
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unparam
+      # Exclude linters for main.go
+      - path: cmd/server/main\.go
+        linters:
+          - unparam
 
 formatters:
   enable:
     - gofmt
     - goimports
-
-formatters-settings:
-  goimports:
-    local-prefixes:
-      - github.com/avalarin/livlog/backend
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-  misspell:
-    locale: US
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/avalarin/livlog/backend
 
 issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - unparam
-    # Exclude linters for main.go
-    - path: cmd/server/main\.go
-      linters:
-        - unparam
   max-same-issues: 0
   max-issues-per-linter: 0
