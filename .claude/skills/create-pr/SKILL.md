@@ -23,7 +23,7 @@ Run these checks before doing anything:
 
 1. **Verify `gh` is available** — run `which gh`. If missing, stop and tell the user to install it.
 2. **Check for uncommitted changes** — run `git status --porcelain`. If there are uncommitted or untracked files, stop and tell the user what's pending. Don't proceed until the working tree is clean.
-3. **Get current branch** — run `git branch --show-current`. Note whether you're on `main` or a feature branch. If on `main`, you will skip PR creation (Step 5) but you MUST still run Steps 2-4 (push, monitor CI, handle failures).
+3. **Get current branch** — run `git branch --show-current`. Note whether you're on `main` or a feature branch. If on `main`, you will skip merge conflict check and PR creation (Steps 5-6) but you MUST still run Steps 2-4 (push, monitor CI, handle failures).
 
 ### Step 2: Push to origin
 
@@ -49,7 +49,7 @@ gh run watch <run-id> --exit-status
 
 Use `--exit-status` so the command exits with non-zero if the run fails. Set a reasonable timeout (10 minutes).
 
-If no CI workflows are found (e.g., only backend files changed and the push didn't trigger anything), skip to Step 5.
+If no CI workflows are found (e.g., only backend files changed and the push didn't trigger anything), skip to Step 5 (merge conflicts check).
 
 ### Step 4: Handle CI failures
 
@@ -85,9 +85,64 @@ If CI fails:
 
 If the user declines the fix, stop and report the current state.
 
-### Step 5: Create Pull Request
+### Step 5: Check for merge conflicts
 
-If on `main`, skip this step — tell the user: "Pushed directly to main. No PR created." and go to Step 6.
+If on `main`, skip this step and go to Step 6.
+
+Check if the branch has merge conflicts with the base branch (`main`):
+
+```bash
+git fetch origin main && git merge-tree $(git merge-base HEAD origin/main) origin/main HEAD
+```
+
+Or attempt a dry-run merge:
+
+```bash
+git fetch origin main
+git merge --no-commit --no-ff origin/main
+```
+
+If there are **no conflicts**, abort the merge and proceed:
+
+```bash
+git merge --abort
+```
+
+If there **are conflicts**:
+
+1. Abort the test merge:
+   ```bash
+   git merge --abort
+   ```
+
+2. **Ask the user for permission** before resolving. Use AskUserQuestion to show them:
+   - Which files have conflicts
+   - A brief summary of the conflicting changes
+   - "Should I try to resolve these merge conflicts?"
+
+3. If the user agrees, use a sub-agent (software-engineer) to resolve the conflicts:
+   - Run `git merge origin/main` to start the real merge
+   - Analyze each conflicted file and resolve appropriately
+   - Run local verification (lint, build, test — see CLAUDE.md for commands)
+
+4. **Ask the user for permission to commit and push** using AskUserQuestion:
+   - Show which files were resolved and how
+   - "Can I commit the merge and push?"
+
+5. If approved, complete the merge and push:
+   ```bash
+   git add <resolved-files>
+   git commit -m "merge: resolve conflicts with main"
+   git push
+   ```
+
+6. Go back to Step 3 to monitor the new CI run.
+
+If the user declines, abort the merge (`git merge --abort`) and report the current state.
+
+### Step 6: Create Pull Request
+
+If on `main`, skip this step — tell the user: "Pushed directly to main. No PR created." and go to Step 7.
 
 Once CI passes (or was skipped), create the PR:
 
@@ -112,7 +167,7 @@ Once CI passes (or was skipped), create the PR:
    - Summary of changes (2-3 bullet points)
    - Test plan if applicable
 
-### Step 6: Summary
+### Step 7: Summary
 
 Present the user with a final summary:
 
