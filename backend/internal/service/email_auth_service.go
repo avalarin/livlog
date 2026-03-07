@@ -32,22 +32,22 @@ var (
 )
 
 type EmailAuthService struct {
-	userRepo           *repository.UserRepository
-	codeRepo           *repository.VerificationCodeRepository
-	attemptRepo        *repository.VerificationAttemptRepository
-	jwtService         *JWTService
-	emailSender        *EmailSender
+	userRepo           UserRepository
+	codeRepo           VerificationCodeRepository
+	attemptRepo        VerificationAttemptRepository
+	jwtService         JWTProvider
+	emailSender        EmailProvider
 	resendCooldown     time.Duration
 	maxCodesPerHour    int
 	ipRateLimitEnabled bool
 }
 
 func NewEmailAuthService(
-	userRepo *repository.UserRepository,
-	codeRepo *repository.VerificationCodeRepository,
-	attemptRepo *repository.VerificationAttemptRepository,
-	jwtService *JWTService,
-	emailSender *EmailSender,
+	userRepo UserRepository,
+	codeRepo VerificationCodeRepository,
+	attemptRepo VerificationAttemptRepository,
+	jwtService JWTProvider,
+	emailSender EmailProvider,
 	resendCooldown time.Duration,
 	maxCodesPerHour int,
 	ipRateLimitEnabled bool,

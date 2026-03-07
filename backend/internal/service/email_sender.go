@@ -16,6 +16,7 @@ type EmailSender struct {
 	apiKey      string
 	fromName    string
 	fromAddress string
+	baseURL     string
 	httpClient  *http.Client
 	log         *zap.Logger
 }
@@ -26,6 +27,7 @@ func NewEmailSender(enabled bool, apiKey string, fromName string, fromAddress st
 		apiKey:      apiKey,
 		fromName:    fromName,
 		fromAddress: fromAddress,
+		baseURL:     "https://api.resend.com",
 		httpClient:  &http.Client{Timeout: 10 * time.Second},
 		log:         log,
 	}
@@ -33,7 +35,7 @@ func NewEmailSender(enabled bool, apiKey string, fromName string, fromAddress st
 
 func (s *EmailSender) SendVerificationCode(ctx context.Context, email string, code string) error {
 	if !s.enabled {
-		s.log.Debug("email sending disabled, skipping", zap.String("email", email), zap.String("code", code))
+		s.log.Debug("email sending disabled, skipping", zap.String("email", email))
 		return nil
 	}
 
@@ -62,7 +64,7 @@ func (s *EmailSender) sendViaResend(ctx context.Context, toEmail string, code st
 		return fmt.Errorf("failed to marshal email payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.resend.com/emails", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/emails", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
