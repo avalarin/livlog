@@ -54,14 +54,12 @@ docker build \
   --build-arg APP_VERSION="${APP_VERSION}" \
   --build-arg APP_COMMIT="${COMMIT_SHA}" \
   -t "${FULL_IMAGE}" \
-  -t "${IMAGE}:latest" \
   -f "${REPO_ROOT}/Dockerfile" \
   "${REPO_ROOT}"
 
 echo ""
 echo "==> Pushing to GHCR..."
 docker push "${FULL_IMAGE}"
-docker push "${IMAGE}:latest"
 
 # ---------- deploy via SSH ----------
 
