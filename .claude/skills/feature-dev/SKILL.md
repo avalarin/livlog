@@ -59,7 +59,8 @@ Initial request: $ARGUMENTS
 
 **Goal**: Fill in gaps and resolve all ambiguities before designing
 
-**CRITICAL**: This is one of the most important phases. DO NOT SKIP.
+**CRITICAL**: This is one of the most important phases. DO NOT SKIP. Always use AskUserQuestion tool to ask questions.
+
 
 **Actions**:
 1. Review the codebase findings and original feature request
@@ -88,6 +89,7 @@ If the user says "whatever you think is best", provide your recommendation and g
 **Goal**: Build the feature
 
 **DO NOT START WITHOUT USER APPROVAL**
+Use AskUserQuestion tool to ask the user for confirmation.
 
 **Actions**:
 1. Wait for explicit user approval
