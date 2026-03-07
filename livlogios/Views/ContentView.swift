@@ -316,7 +316,9 @@ struct ContentView: View {
             ? (selectedIDs.isEmpty ? "Select Entries" : "\(selectedIDs.count) Selected")
             : collection.name)
         .toolbar { toolbarContent }
-        .sheet(isPresented: $showingAddEntry) {
+        .sheet(isPresented: $showingAddEntry, onDismiss: {
+            Task { await loadData() }
+        }) {
             AddEntryView(collection: collection)
         }
         .fullScreenCover(isPresented: $showingSearch) {

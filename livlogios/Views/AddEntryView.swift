@@ -153,6 +153,9 @@ struct AddEntryView: View {
                 additionalFieldValues = additionalFieldValues.filter { newFieldKeys.contains($0.key) }
             }
             .task {
+                if !isEditing {
+                    focus = .title
+                }
                 await loadData()
             }
             .sheet(isPresented: $showAISearchSheet) {
