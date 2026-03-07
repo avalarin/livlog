@@ -23,6 +23,7 @@ final class ConnectionMonitor: ObservableObject {
     static let shared = ConnectionMonitor()
 
     @Published private(set) var status: ConnectionStatus = .unknown
+    @Published private(set) var serverVersion: String?
     @Published private(set) var showToast: Bool = false
     @Published private(set) var toastMessage: String = ""
     @Published private(set) var isToastSuccess: Bool = false
@@ -46,8 +47,11 @@ final class ConnectionMonitor: ObservableObject {
 
             // Periodic checks
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(self.checkInterval * 1_000_000_000))
-                if Task.isCancelled { break }
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(self.checkInterval * 1_000_000_000))
+                } catch {
+                    break
+                }
                 await self.performHealthCheck()
             }
         }
@@ -61,8 +65,13 @@ final class ConnectionMonitor: ObservableObject {
     }
 
     private func performHealthCheck() async {
-        let isHealthy = await BackendService.shared.checkHealth()
+        let healthResponse = await BackendService.shared.checkHealth()
+        let isHealthy = healthResponse?.isHealthy ?? false
         let newStatus: ConnectionStatus = isHealthy ? .connected : .disconnected
+
+        if let version = healthResponse?.version {
+            serverVersion = version
+        }
 
         // Only show toast on status change (not on initial unknown state)
         if newStatus == .disconnected || (newStatus == .connected && status == .disconnected) {
@@ -77,6 +86,24 @@ final class ConnectionMonitor: ObservableObject {
         }
     }
 
+    func fetchServerVersion() async {
+        guard serverVersion == nil else { return }
+        let response = await BackendService.shared.checkHealth()
+        if let version = response?.version {
+            serverVersion = version
+        }
+    }
+
+    func resetState() {
+        stopMonitoring()
+        status = .unknown
+        serverVersion = nil
+        showToast = false
+        toastMessage = ""
+        isToastSuccess = false
+        secondsUntilNextCheck = 0
+    }
+
     private func showStatusToast(isConnected: Bool) {
         toastDismissTask?.cancel()
 
@@ -87,8 +114,11 @@ final class ConnectionMonitor: ObservableObject {
         // Only auto-dismiss success toast, error toast stays until connection is restored
         if isConnected {
             toastDismissTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
-                guard !Task.isCancelled else { return }
+                do {
+                    try await Task.sleep(nanoseconds: 3_000_000_000)
+                } catch {
+                    return
+                }
                 self?.showToast = false
             }
         }
@@ -101,9 +131,12 @@ final class ConnectionMonitor: ObservableObject {
         countdownTask = Task { [weak self] in
             guard let self = self else { return }
 
-            while self.secondsUntilNextCheck > 0 && !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-                guard !Task.isCancelled else { return }
+            while self.secondsUntilNextCheck > 0 {
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return
+                }
                 self.secondsUntilNextCheck -= 1
             }
         }

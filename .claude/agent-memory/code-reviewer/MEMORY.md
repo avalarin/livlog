@@ -12,7 +12,7 @@
 
 - **[bug] `@State` seeded via `init` overwritten by `.task`/`.onAppear`** — initial value set in `init` is replaced on first appear when a network load unconditionally reassigns the same state. Either skip the load when state is already populated, or don't seed from `init`.
 
-- **[bug] Singleton wrapped in `@StateObject` instead of `@ObservedObject`** — `@StateObject` implies ownership of the object lifetime. Singletons are externally owned; use `@ObservedObject`.
+- **[bug] Singleton wrapped in `@StateObject` instead of `@ObservedObject`** — `@StateObject` implies ownership of the object lifetime. Singletons are externally owned; use `@ObservedObject`. Seen in livlogiosApp.swift (`connectionMonitor`), LoginView.swift, and SettingsView.swift — check every site that initialises a `.shared` singleton via a property wrapper.
 
 - **[code-smell] `ForEach` with `id: \.offset`** — provides unstable identity; any insertion or deletion causes downstream items to be treated as new by SwiftUI, breaking animations and state. Always use a stable, unique id.
 

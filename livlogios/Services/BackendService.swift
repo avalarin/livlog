@@ -32,13 +32,11 @@ struct HealthResponse: Decodable {
 actor BackendService {
     static let shared = BackendService()
 
-    private let baseURL: String
+    private var baseURL: String { AppConfig.baseURL }
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
     private init() {
-        self.baseURL = AppConfig.baseURL ?? "http://localhost:8080/api/v1"
-
         self.decoder = JSONDecoder()
         self.decoder.dateDecodingStrategy = .iso8601
 
@@ -48,9 +46,9 @@ actor BackendService {
 
     // MARK: - Health Check
 
-    func checkHealth() async -> Bool {
+    func checkHealth() async -> HealthResponse? {
         guard let url = AppConfig.healthCheckURL else {
-            return false
+            return nil
         }
 
         var request = URLRequest(url: url)
@@ -62,13 +60,12 @@ actor BackendService {
 
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                return false
+                return nil
             }
 
-            let healthResponse = try decoder.decode(HealthResponse.self, from: data)
-            return healthResponse.isHealthy
+            return try decoder.decode(HealthResponse.self, from: data)
         } catch {
-            return false
+            return nil
         }
     }
 
@@ -88,7 +85,8 @@ actor BackendService {
         body: Data? = nil,
         includeAuth: Bool = true
     ) async throws -> (Data, HTTPURLResponse) {
-        guard let url = URL(string: "\(baseURL)\(path)") else {
+        let currentBaseURL = baseURL
+        guard let url = URL(string: "\(currentBaseURL)\(path)") else {
             throw AuthError.networkError
         }
 

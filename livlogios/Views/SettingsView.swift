@@ -9,6 +9,7 @@ import UIKit
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var connectionMonitor = ConnectionMonitor.shared
 
     @State private var mcpStatus: MCPStatusResponse?
     @State private var isLoadingMCP = false
@@ -17,6 +18,8 @@ struct SettingsView: View {
     @State private var showError = false
     @State private var toastMessage: String?
     @State private var showDeleteAccountAlert = false
+    @State private var showHostSwitchAlert = false
+    @State private var pendingHost: ServerHost?
 
     var body: some View {
         NavigationStack {
@@ -149,18 +152,42 @@ struct SettingsView: View {
                 Text("This will permanently delete your account and all data. This cannot be undone.")
             }
             .overlay(alignment: .bottom) {
-                if let message = toastMessage {
-                    Text(message)
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.black.opacity(0.75), in: Capsule())
-                        .padding(.bottom, 24)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                VStack(spacing: 8) {
+                    if let message = toastMessage {
+                        Text(message)
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.black.opacity(0.75), in: Capsule())
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    ServerInfoView(
+                        connectionMonitor: connectionMonitor,
+                        showStatusDot: true,
+                        onHostSwitch: { host in
+                            pendingHost = host
+                            showHostSwitchAlert = true
+                        }
+                    )
                 }
+                .padding(.bottom, 24)
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: toastMessage)
+            .alert("Switch Server", isPresented: $showHostSwitchAlert) {
+                Button("Cancel", role: .cancel) { pendingHost = nil }
+                Button("Continue", role: .destructive) {
+                    guard let host = pendingHost else { return }
+                    ServerHost.selected = host
+                    connectionMonitor.resetState()
+                    Task {
+                        await appState.logout()
+                        dismiss()
+                    }
+                }
+            } message: {
+                Text("Changing server will log you out. Continue?")
+            }
         }
     }
 

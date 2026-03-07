@@ -30,6 +30,13 @@ struct livlogiosApp: App {
                     connectionMonitor.startMonitoring()
                 }
             }
+            .onChange(of: appState.isAuthenticated) { _, isAuthenticated in
+                if isAuthenticated {
+                    connectionMonitor.startMonitoring()
+                } else {
+                    connectionMonitor.stopMonitoring()
+                }
+            }
         }
     }
 }

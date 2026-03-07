@@ -10,6 +10,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject var connectionMonitor = ConnectionMonitor.shared
     @State private var email = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -90,7 +91,21 @@ struct LoginView: View {
                     .cornerRadius(8)
                 }
 
-                Spacer()
+                ServerInfoView(
+                    connectionMonitor: connectionMonitor,
+                    showStatusDot: false,
+                    onHostSwitch: { host in
+                        ServerHost.selected = host
+                        connectionMonitor.resetState()
+                        Task {
+                            await connectionMonitor.fetchServerVersion()
+                        }
+                    }
+                )
+                .padding(.bottom, 8)
+            }
+            .task {
+                await connectionMonitor.fetchServerVersion()
             }
             .navigationDestination(isPresented: $showVerificationView) {
                 EmailVerificationView(email: email)
