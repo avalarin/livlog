@@ -76,10 +76,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/avalarin/livlog
+          images: ghcr.io/${{ github.repository_owner }}/livlog
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}-${{ steps.version.outputs.commit }},enable=${{ github.ref_type == 'branch' }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=ref,event=tag
 
       - name: Build and push Docker image
