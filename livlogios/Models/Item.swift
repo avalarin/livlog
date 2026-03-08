@@ -381,7 +381,9 @@ private func parseISO8601(_ string: String) throws -> Date {
 
 #if DEBUG
 extension CollectionModel {
-    static let previewMyList = CollectionModel(id: "my-list", name: "My List", icon: "system:folder", color: "dodger-blue")
+    static let previewMyList = CollectionModel(
+        id: "my-list", name: "My List", icon: "system:folder", color: "dodger-blue"
+    )
 
     static let previewCollections: [CollectionModel] = [previewMyList]
 }
@@ -432,7 +434,8 @@ extension EntryModel {
         ),
         EntryModel(
             id: "3", collectionID: "my-list", typeID: "game", title: "Elden Ring",
-            description: "A demanding open-world adventure that doesn't shy away from testing your patience and skill, but pays you back in a big way with a strong sense of progress, memorable discoveries, and the satisfaction of overcoming obstacles through persistence and smart choices.",
+            description: "A demanding open-world adventure that doesn't shy away from testing your patience and skill, "
+                + "but pays you back with memorable discoveries and the satisfaction of overcoming obstacles.",
             score: .great, date: .now.addingTimeInterval(-86400 * 14),
             additionalFields: ["Year": "2022", "Platform": "PC"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000003", isCover: true, position: 0)]
@@ -446,7 +449,8 @@ extension EntryModel {
         ),
         EntryModel(
             id: "5", collectionID: "my-list", typeID: "movie", title: "The Dark Knight",
-            description: "Heath Ledger's Joker is widely regarded as an iconic performance, bringing a chilling mix of unpredictability, dark humor, and menace to the character while giving him a strangely compelling presence that lingers long after the film ends.",
+            description: "Heath Ledger's Joker is widely regarded as an iconic performance, bringing a chilling mix "
+                + "of unpredictability, dark humor, and menace that lingers long after the film ends.",
             score: .great, date: .now.addingTimeInterval(-86400 * 2),
             additionalFields: ["Year": "2008", "Genre": "Action"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000004", isCover: true, position: 0)]

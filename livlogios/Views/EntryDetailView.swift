@@ -35,9 +35,9 @@ struct EntryDetailView: View {
     private var metadataItems: [(key: String, value: String)] {
         guard let entry = entry else { return [] }
         let fieldOrder = ["Year", "Genre", "Author", "Platform"]
-        return entry.additionalFields.sorted { a, b in
-            let indexA = fieldOrder.firstIndex(of: a.key) ?? Int.max
-            let indexB = fieldOrder.firstIndex(of: b.key) ?? Int.max
+        return entry.additionalFields.sorted { lhs, rhs in
+            let indexA = fieldOrder.firstIndex(of: lhs.key) ?? Int.max
+            let indexB = fieldOrder.firstIndex(of: rhs.key) ?? Int.max
             return indexA < indexB
         }
     }

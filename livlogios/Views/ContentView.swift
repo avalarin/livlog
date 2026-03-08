@@ -225,7 +225,9 @@ struct ContentView: View {
                                         }
                                         .buttonStyle(.plain)
                                     } else {
-                                        NavigationLink(destination: EntryDetailView(entryID: item.id, myRole: collection.myRole)) {
+                                        NavigationLink(destination: EntryDetailView(
+                                            entryID: item.id, myRole: collection.myRole
+                                        )) {
                                             EntryCard(
                                                 item: item,
                                                 entryType: entryType,
@@ -263,7 +265,9 @@ struct ContentView: View {
                                         }
                                         .buttonStyle(.plain)
                                     } else {
-                                        NavigationLink(destination: EntryDetailView(entryID: item.id, myRole: collection.myRole)) {
+                                        NavigationLink(destination: EntryDetailView(
+                                            entryID: item.id, myRole: collection.myRole
+                                        )) {
                                             EntryListRow(
                                                 item: item,
                                                 entryType: entryType,
@@ -324,13 +328,17 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showingSearch) {
             SearchView(types: types)
         }
-        .alert("Delete \(selectedIDs.count) \(selectedIDs.count == 1 ? "Entry" : "Entries")", isPresented: $showingBulkDeleteAlert) {
+        .alert(
+            "Delete \(selectedIDs.count) \(selectedIDs.count == 1 ? "Entry" : "Entries")",
+            isPresented: $showingBulkDeleteAlert
+        ) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
                 Task { await bulkDeleteEntries() }
             }
         } message: {
-            Text("This will permanently delete \(selectedIDs.count) selected \(selectedIDs.count == 1 ? "entry" : "entries"). This action cannot be undone.")
+            let noun = selectedIDs.count == 1 ? "entry" : "entries"
+            Text("This will permanently delete \(selectedIDs.count) selected \(noun). This action cannot be undone.")
         }
         .alert("Clear All Data", isPresented: $showingDebugMenu) {
             Button("Cancel", role: .cancel) { }
@@ -359,45 +367,71 @@ struct ContentView: View {
 
     // MARK: - Debug Actions
 
-    public func fillWithTestData() async {
-        let testData: [(String, String, ScoreRating, TimeInterval, [String: String], [String])] = [
-            ("Inception", "Inception (2010) is a sci‑fi heist thriller in which Dom Cobb, a skilled thief who steals secrets from inside people's dreams, is offered a chance to clear his criminal record.",
-             .great, 0, ["Year": "2010", "Genre": "Sci-Fi, Thriller"],
-             ["00000000-0000-0000-0001-000000000001"]),
-            ("The Dark Knight", "Heath Ledger's iconic Joker performance.",
-             .great, -86400 * 2, ["Year": "2008", "Genre": "Action, Drama"],
-             ["00000000-0000-0000-0001-000000000004"]),
-            ("1984", "Orwell's dystopian vision of totalitarian future.",
-             .great, -86400 * 5, ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"],
-             ["00000000-0000-0000-0001-000000000002"]),
-            ("Dune", "Epic science fiction masterpiece.",
-             .okay, -86400 * 10, ["Year": "1965", "Genre": "Sci-Fi", "Author": "Frank Herbert"],
-             []),
-            ("Elden Ring", "Challenging but incredibly rewarding open-world adventure.",
-             .great, -86400 * 14, ["Year": "2022", "Genre": "Action RPG", "Platform": "PC"],
-             ["00000000-0000-0000-0001-000000000003"]),
-            ("Cyberpunk 2077", "Finally fixed and pretty good now.",
-             .okay, -86400 * 20, ["Year": "2020", "Genre": "RPG", "Platform": "PlayStation"],
-             []),
-            ("Concert: Radiohead", "Amazing live performance, goosebumps throughout.",
-             .great, -86400 * 30, [:],
-             ["00000000-0000-0000-0001-000000000005"]),
-            ("Cooking Class", "Learned to make pasta from scratch. Meh instructor.",
-             .bad, -86400 * 45, [:],
-             [])
-        ]
+    private struct TestEntryData {
+        let title: String
+        let description: String
+        let score: ScoreRating
+        let dateOffset: TimeInterval
+        let fields: [String: String]
+        let seedIDs: [String]
+    }
 
-        for (title, description, score, dateOffset, fields, seedIDs) in testData {
+    private var testEntries: [TestEntryData] {[
+        TestEntryData(title: "Inception",
+            description: "Inception (2010) is a sci‑fi heist thriller in which Dom Cobb, "
+                + "a skilled thief who steals secrets from inside people's dreams.",
+            score: .great, dateOffset: 0,
+            fields: ["Year": "2010", "Genre": "Sci-Fi, Thriller"],
+            seedIDs: ["00000000-0000-0000-0001-000000000001"]),
+        TestEntryData(title: "The Dark Knight",
+            description: "Heath Ledger's iconic Joker performance.",
+            score: .great, dateOffset: -86400 * 2,
+            fields: ["Year": "2008", "Genre": "Action, Drama"],
+            seedIDs: ["00000000-0000-0000-0001-000000000004"]),
+        TestEntryData(title: "1984",
+            description: "Orwell's dystopian vision of totalitarian future.",
+            score: .great, dateOffset: -86400 * 5,
+            fields: ["Year": "1949", "Genre": "Dystopian", "Author": "George Orwell"],
+            seedIDs: ["00000000-0000-0000-0001-000000000002"]),
+        TestEntryData(title: "Dune",
+            description: "Epic science fiction masterpiece.",
+            score: .okay, dateOffset: -86400 * 10,
+            fields: ["Year": "1965", "Genre": "Sci-Fi", "Author": "Frank Herbert"],
+            seedIDs: []),
+        TestEntryData(title: "Elden Ring",
+            description: "Challenging but incredibly rewarding open-world adventure.",
+            score: .great, dateOffset: -86400 * 14,
+            fields: ["Year": "2022", "Genre": "Action RPG", "Platform": "PC"],
+            seedIDs: ["00000000-0000-0000-0001-000000000003"]),
+        TestEntryData(title: "Cyberpunk 2077",
+            description: "Finally fixed and pretty good now.",
+            score: .okay, dateOffset: -86400 * 20,
+            fields: ["Year": "2020", "Genre": "RPG", "Platform": "PlayStation"],
+            seedIDs: []),
+        TestEntryData(title: "Concert: Radiohead",
+            description: "Amazing live performance, goosebumps throughout.",
+            score: .great, dateOffset: -86400 * 30,
+            fields: [:],
+            seedIDs: ["00000000-0000-0000-0001-000000000005"]),
+        TestEntryData(title: "Cooking Class",
+            description: "Learned to make pasta from scratch. Meh instructor.",
+            score: .bad, dateOffset: -86400 * 45,
+            fields: [:],
+            seedIDs: [])
+    ]}
+
+    public func fillWithTestData() async {
+        for entry in testEntries {
             do {
                 _ = try await EntryService.shared.createEntry(
                     collectionID: collection.id,
-                    title: title,
-                    description: description,
-                    score: score,
-                    date: Date().addingTimeInterval(dateOffset),
-                    additionalFields: fields,
+                    title: entry.title,
+                    description: entry.description,
+                    score: entry.score,
+                    date: Date().addingTimeInterval(entry.dateOffset),
+                    additionalFields: entry.fields,
                     imageData: [],
-                    seedImageIDs: seedIDs
+                    seedImageIDs: entry.seedIDs
                 )
             } catch {
                 errorMessage = "Failed to create test entry: \(error.localizedDescription)"
@@ -423,371 +457,6 @@ struct ContentView: View {
         await loadData()
     }
 }
-
-struct EntryCard: View {
-    let item: EntryModel
-    let entryType: EntryTypeModel?
-    var onDelete: (() async -> Void)? = nil
-    var isSelectMode: Bool = false
-    var isSelected: Bool = false
-    var canWrite: Bool = true
-
-    @State private var showingDeleteAlert = false
-    @State private var isDeleting = false
-    @State private var coverImage: UIImage?
-    @State private var isImageLoading = false
-
-    private var metadataLine: String {
-        let line = item.additionalFields.values.joined(separator: "・")
-        return line.isEmpty ? "-" : line
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color.accentColor.opacity(0.3),
-                        Color.accentColor.opacity(0.1)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 140)
-                .overlay(
-                    Text(entryType?.icon ?? "📝")
-                        .font(.system(size: 48))
-                        .opacity(coverImage == nil && isImageLoading ? 0 : 0.5)
-                )
-                .shimmerLoading(coverImage == nil && isImageLoading)
-
-                if let coverImage {
-                    Image(uiImage: coverImage)
-                        .resizable()
-                        .scaledToFill()
-                        .layoutPriority(-1)
-                }
-            }
-            .clipped()
-            .overlay(alignment: .topLeading) {
-                Text(item.score.emoji)
-                    .font(.title3)
-                    .padding(6)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-                    .padding(8)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 4) {
-                    Text(entryType?.icon ?? "📝")
-                        .font(.caption)
-                    Text(item.date, format: .dateTime.month(.abbreviated).day())
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text(item.title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-
-                if !metadataLine.isEmpty {
-                    Text(metadataLine)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                if !item.description.isEmpty {
-                    Text(item.description + "\n")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(2)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.vertical, 16)
-            .padding(.horizontal, 12)
-        }
-        .frame(maxWidth: .infinity)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).fill(isSelected ? Color.gray.opacity(0.2) : Color.clear))
-        .overlay(alignment: .bottomTrailing) {
-            if isSelectMode {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                    .padding(8)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .padding(8)
-            }
-        }
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
-        .opacity(isDeleting ? 0.5 : 1.0)
-        .if(!isSelectMode && onDelete != nil) { view in
-            view.contextMenu {
-                if canWrite {
-                    Button(role: .destructive) {
-                        showingDeleteAlert = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
-        }
-        .alert("Delete Entry", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                if let onDelete {
-                    Task {
-                        isDeleting = true
-                        await onDelete()
-                    }
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete \"\(item.title)\"?")
-        }
-        .task(id: item.id) {
-            await loadCoverImage()
-        }
-    }
-
-    private func loadCoverImage() async {
-        let cover = item.images.first { $0.isCover } ?? item.images.first
-        guard let cover else { return }
-        isImageLoading = true
-        defer { isImageLoading = false }
-        guard let image = try? await ImageLoaderService.shared.load(id: cover.id, hash: cover.hash) else { return }
-        coverImage = image
-    }
-}
-
-struct EntryListRow: View {
-    let item: EntryModel
-    let entryType: EntryTypeModel?
-    var onDelete: (() async -> Void)? = nil
-    var isSelectMode: Bool = false
-    var isSelected: Bool = false
-    var canWrite: Bool = true
-
-    @State private var showingDeleteAlert = false
-    @State private var isDeleting = false
-    @State private var coverImage: UIImage?
-    @State private var isImageLoading = false
-
-    private var metadataLine: String {
-        if item.description.isEmpty {
-            return "(no notes)"
-        }
-        let firstLine = item.description.components(separatedBy: .newlines).first ?? ""
-        return firstLine.isEmpty ? "(no notes)" : firstLine
-    }
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if let coverImage {
-                Image(uiImage: coverImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 60, height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                Text(entryType?.icon ?? "📝")
-                    .font(.system(size: 40))
-                    .opacity(isImageLoading ? 0 : 1)
-                    .frame(width: 60, height: 60)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.accentColor.opacity(0.1))
-                    )
-                    .shimmerLoading(isImageLoading)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-
-                HStack(spacing: 4) {
-                    if !metadataLine.isEmpty {
-                        Text(metadataLine)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 4) {
-                if isSelectMode {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                } else {
-                    Text(item.score.emoji)
-                        .font(.title3)
-                }
-
-                Text(item.date, format: .dateTime.month(.abbreviated).day())
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(12)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).fill(isSelected ? Color.gray.opacity(0.2) : Color.clear))
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-        .opacity(isDeleting ? 0.5 : 1.0)
-        .if(!isSelectMode && onDelete != nil) { view in
-            view.contextMenu {
-                if canWrite {
-                    Button(role: .destructive) {
-                        showingDeleteAlert = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
-        }
-        .alert("Delete Entry", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                if let onDelete {
-                    Task {
-                        isDeleting = true
-                        await onDelete()
-                    }
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete \"\(item.title)\"?")
-        }
-        .task(id: item.id) {
-            await loadCoverImage()
-        }
-    }
-
-    private func loadCoverImage() async {
-        let cover = item.images.first { $0.isCover } ?? item.images.first
-        guard let cover else { return }
-        isImageLoading = true
-        defer { isImageLoading = false }
-        guard let image = try? await ImageLoaderService.shared.load(id: cover.id, hash: cover.hash) else { return }
-        coverImage = image
-    }
-}
-
-struct EmptyStateView: View {
-    @Binding var showingAddEntry: Bool
-    var canWrite: Bool = true
-
-    var body: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 16) {
-                Text("📝")
-                    .font(.system(size: 72))
-
-                Text("Your Life Log is Empty")
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                Text("Start tracking movies, books, games,\nand everything else you experience!")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            if canWrite {
-                Button {
-                    showingAddEntry = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus")
-                            .fontWeight(.semibold)
-                        Text("Add First Entry")
-                            .fontWeight(.semibold)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.accentColor)
-                    )
-                    .foregroundStyle(.white)
-                }
-            }
-        }
-        .padding()
-    }
-}
-
-// MARK: - View Extensions
-
-extension View {
-    @ViewBuilder
-    func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
-        if condition {
-            transform(self)
-        } else {
-            self
-        }
-    }
-
-    /// Applies `.glassEffect(in:)` on iOS 26+, falls back to `.thinMaterial` on earlier versions.
-    @ViewBuilder
-    func glassOrMaterial<S: Shape>(in shape: S) -> some View {
-        if #available(iOS 26, *) {
-            self.glassEffect(in: shape)
-        } else {
-            self.background(.thinMaterial, in: shape)
-        }
-    }
-
-    @ViewBuilder
-    func shimmerLoading(_ isLoading: Bool) -> some View {
-        if isLoading {
-            modifier(ShimmerModifier())
-        } else {
-            self
-        }
-    }
-}
-
-// MARK: - ShimmerModifier
-
-struct ShimmerModifier: ViewModifier {
-    @State private var phase: CGFloat = -1
-
-    func body(content: Content) -> some View {
-        content.overlay(
-            GeometryReader { geo in
-                LinearGradient(
-                    colors: [.clear, .white.opacity(0.5), .clear],
-                    startPoint: .init(x: phase, y: 0.5),
-                    endPoint: .init(x: phase + 0.5, y: 0.5)
-                )
-                .frame(width: geo.size.width * 2)
-                .offset(x: -geo.size.width)
-            }
-            .clipped()
-        )
-        .onAppear {
-            withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
-                phase = 1.5
-            }
-        }
-    }
-}
-
 
 #Preview("Empty State") {
     NavigationStack {
