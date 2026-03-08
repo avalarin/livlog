@@ -1,0 +1,49 @@
+name: iOS Build
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'livlogios/**'
+      - 'livlogiosTests/**'
+      - 'livlogiosUITests/**'
+      - 'livlogios.xcodeproj/**'
+      - '.swiftlint.yml'
+      - '.github/workflows/ios-build.yml'
+
+jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run SwiftLint
+        run: swiftlint lint --strict
+
+  build-and-test:
+    name: Build and Test
+    needs: lint
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -scheme livlogios \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run tests
+        run: |
+          xcodebuild test \
+            -scheme livlogios \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO
