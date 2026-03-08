@@ -29,11 +29,17 @@ jobs:
   build-and-test:
     name: Build and Test
     needs: lint
-    runs-on: macos-15
+    runs-on: macos-15-xlarge
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Using $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE"
 
       - name: Build
         run: |
