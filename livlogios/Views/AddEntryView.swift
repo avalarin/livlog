@@ -128,6 +128,7 @@ struct AddEntryView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button(action: {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         Task {
                             await saveEntry()
                         }
