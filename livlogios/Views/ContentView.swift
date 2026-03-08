@@ -299,6 +299,7 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         Button {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                             showingAddEntry = true
                         } label: {
                             Image(systemName: "plus")

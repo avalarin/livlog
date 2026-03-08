@@ -90,6 +90,7 @@ struct EmptyStateView: View {
 
             if canWrite {
                 Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     showingAddEntry = true
                 } label: {
                     HStack(spacing: 8) {
