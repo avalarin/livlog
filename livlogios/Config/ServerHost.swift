@@ -6,9 +6,9 @@
 import Foundation
 
 nonisolated enum ServerHost: String, CaseIterable {
-    case local = "local"
-    case dev = "dev"
-    case prod = "prod"
+    case local
+    case dev
+    case prod
 
     var url: String {
         switch self {

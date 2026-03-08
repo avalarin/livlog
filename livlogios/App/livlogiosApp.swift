@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct livlogiosApp: App {
+struct livlogiosApp: App { // swiftlint:disable:this type_name
     @StateObject private var connectionMonitor = ConnectionMonitor.shared
     @StateObject private var appState = AppState()
 

@@ -98,39 +98,8 @@ struct CollectionModel: Codable, Identifiable {
         myRole = try container.decodeIfPresent(CollectionRole.self, forKey: .myRole) ?? .read
         sharedBy = try container.decodeIfPresent(String.self, forKey: .sharedBy)
 
-        // Decode ISO8601 timestamps
-        let iso8601Formatter = ISO8601DateFormatter()
-        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let createdAtString = try container.decode(String.self, forKey: .createdAt)
-        if let parsedCreatedAt = iso8601Formatter.date(from: createdAtString) {
-            createdAt = parsedCreatedAt
-        } else {
-            iso8601Formatter.formatOptions = [.withInternetDateTime]
-            guard let parsedCreatedAt = iso8601Formatter.date(from: createdAtString) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .createdAt,
-                    in: container,
-                    debugDescription: "CreatedAt string does not match ISO8601 format"
-                )
-            }
-            createdAt = parsedCreatedAt
-        }
-
-        let updatedAtString = try container.decode(String.self, forKey: .updatedAt)
-        if let parsedUpdatedAt = iso8601Formatter.date(from: updatedAtString) {
-            updatedAt = parsedUpdatedAt
-        } else {
-            iso8601Formatter.formatOptions = [.withInternetDateTime]
-            guard let parsedUpdatedAt = iso8601Formatter.date(from: updatedAtString) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .updatedAt,
-                    in: container,
-                    debugDescription: "UpdatedAt string does not match ISO8601 format"
-                )
-            }
-            updatedAt = parsedUpdatedAt
-        }
+        createdAt = try parseISO8601(container.decode(String.self, forKey: .createdAt))
+        updatedAt = try parseISO8601(container.decode(String.self, forKey: .updatedAt))
     }
 
     func encode(to encoder: Encoder) throws {
@@ -182,7 +151,14 @@ struct EntryTypeModel: Codable, Identifiable, Equatable {
         case updatedAt = "updated_at"
     }
 
-    init(id: String, name: String, icon: String, fields: [FieldDefinition] = [], createdAt: Date = .now, updatedAt: Date = .now) {
+    init(
+        id: String,
+        name: String,
+        icon: String,
+        fields: [FieldDefinition] = [],
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
         self.id = id
         self.name = name
         self.icon = icon
@@ -199,38 +175,8 @@ struct EntryTypeModel: Codable, Identifiable, Equatable {
         icon = try container.decode(String.self, forKey: .icon)
         fields = try container.decodeIfPresent([FieldDefinition].self, forKey: .fields) ?? []
 
-        let iso8601Formatter = ISO8601DateFormatter()
-        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let createdAtString = try container.decode(String.self, forKey: .createdAt)
-        if let parsedCreatedAt = iso8601Formatter.date(from: createdAtString) {
-            createdAt = parsedCreatedAt
-        } else {
-            iso8601Formatter.formatOptions = [.withInternetDateTime]
-            guard let parsedCreatedAt = iso8601Formatter.date(from: createdAtString) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .createdAt,
-                    in: container,
-                    debugDescription: "CreatedAt string does not match ISO8601 format"
-                )
-            }
-            createdAt = parsedCreatedAt
-        }
-
-        let updatedAtString = try container.decode(String.self, forKey: .updatedAt)
-        if let parsedUpdatedAt = iso8601Formatter.date(from: updatedAtString) {
-            updatedAt = parsedUpdatedAt
-        } else {
-            iso8601Formatter.formatOptions = [.withInternetDateTime]
-            guard let parsedUpdatedAt = iso8601Formatter.date(from: updatedAtString) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .updatedAt,
-                    in: container,
-                    debugDescription: "UpdatedAt string does not match ISO8601 format"
-                )
-            }
-            updatedAt = parsedUpdatedAt
-        }
+        createdAt = try parseISO8601(container.decode(String.self, forKey: .createdAt))
+        updatedAt = try parseISO8601(container.decode(String.self, forKey: .updatedAt))
     }
 
     func encode(to encoder: Encoder) throws {
@@ -358,39 +304,8 @@ struct EntryModel: Codable, Identifiable {
         }
         date = parsedDate
 
-        // Decode ISO8601 timestamps
-        let iso8601Formatter = ISO8601DateFormatter()
-        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let createdAtString = try container.decode(String.self, forKey: .createdAt)
-        if let parsedCreatedAt = iso8601Formatter.date(from: createdAtString) {
-            createdAt = parsedCreatedAt
-        } else {
-            iso8601Formatter.formatOptions = [.withInternetDateTime]
-            guard let parsedCreatedAt = iso8601Formatter.date(from: createdAtString) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .createdAt,
-                    in: container,
-                    debugDescription: "CreatedAt string does not match ISO8601 format"
-                )
-            }
-            createdAt = parsedCreatedAt
-        }
-
-        let updatedAtString = try container.decode(String.self, forKey: .updatedAt)
-        if let parsedUpdatedAt = iso8601Formatter.date(from: updatedAtString) {
-            updatedAt = parsedUpdatedAt
-        } else {
-            iso8601Formatter.formatOptions = [.withInternetDateTime]
-            guard let parsedUpdatedAt = iso8601Formatter.date(from: updatedAtString) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .updatedAt,
-                    in: container,
-                    debugDescription: "UpdatedAt string does not match ISO8601 format"
-                )
-            }
-            updatedAt = parsedUpdatedAt
-        }
+        createdAt = try parseISO8601(container.decode(String.self, forKey: .createdAt))
+        updatedAt = try parseISO8601(container.decode(String.self, forKey: .updatedAt))
     }
 
     func encode(to encoder: Encoder) throws {
@@ -449,6 +364,19 @@ struct MCPStatusResponse: Codable {
     let url: String?
 }
 
+// MARK: - Helpers
+
+private func parseISO8601(_ string: String) throws -> Date {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: string) { return date }
+    formatter.formatOptions = [.withInternetDateTime]
+    if let date = formatter.date(from: string) { return date }
+    throw DecodingError.dataCorrupted(
+        DecodingError.Context(codingPath: [], debugDescription: "Invalid ISO8601 date: \(string)")
+    )
+}
+
 // MARK: - Preview Data
 
 #if DEBUG
@@ -480,20 +408,24 @@ extension EntryTypeModel {
         FieldDefinition(key: "Artist", label: "Artist", type: "string")
     ])
     static let previewOther = EntryTypeModel(id: "other", name: "Other", icon: "📝")
-    static let previewTypes: [EntryTypeModel] = [previewMovie, previewBook, previewGame, previewShow, previewMusic, previewOther]
+    static let previewTypes: [EntryTypeModel] = [
+        previewMovie, previewBook, previewGame, previewShow, previewMusic, previewOther
+    ]
 }
 
 extension EntryModel {
     static let previewItems: [EntryModel] = [
         EntryModel(
             id: "1", collectionID: "my-list", typeID: "movie", title: "Inception",
-            description: "Inception (2010) is a sci-fi heist thriller in which Dom Cobb, a skilled thief who steals secrets from inside people's dreams, is offered a chance to clear his criminal record. His team must attempt the harder task of inception - planting an idea in a target's mind - by entering layered dream worlds with shifting rules and unstable physics. As the dreams deepen, time stretches and reality becomes harder to distinguish from illusion. The film explores memory, guilt, and perception, building to an ambiguous ending.",
+            description: "A sci-fi heist thriller about a thief who steals secrets from dreams, "
+                + "tasked with planting an idea in a target's mind through layered dream worlds.",
             score: .great, date: .now, additionalFields: ["Year": "2010", "Genre": "Sci-Fi"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000001", isCover: true, position: 0)]
         ),
         EntryModel(
             id: "2", collectionID: "my-list", typeID: "book", title: "One Thousand Eight Hundred Eighty-Four",
-            description: "Orwell presents a bleak dystopian vision of a future shaped by an all-powerful totalitarian state—one that maintains control through constant surveillance, relentless propaganda, and the steady erosion of individual freedom, privacy, and independent thought.",
+            description: "Orwell's bleak dystopia of a totalitarian state that controls through "
+                + "surveillance, propaganda, and the erosion of individual freedom.",
             score: .great, date: .now.addingTimeInterval(-86400 * 5),
             additionalFields: ["Year": "1949", "Author": "George Orwell"],
             images: [ImageMeta(id: "00000000-0000-0000-0001-000000000002", isCover: true, position: 0)]
