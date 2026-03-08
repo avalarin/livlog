@@ -15,14 +15,16 @@ on:
 jobs:
   lint:
     name: SwiftLint
-    runs-on: macos-15
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Run SwiftLint
-        run: swiftlint lint --strict
+        uses: norio-nomura/action-swiftlint@3.2.1
+        with:
+          args: --strict
 
   build-and-test:
     name: Build and Test
