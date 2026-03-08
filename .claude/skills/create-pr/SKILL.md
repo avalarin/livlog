@@ -35,21 +35,30 @@ If push fails (e.g., no upstream, rejected), diagnose and report to the user.
 
 ### Step 3: Monitor CI
 
-After pushing, check if there are GitHub Actions workflows running for this branch:
+After pushing, check if there are GitHub Actions workflows running for this branch.
+
+**IMPORTANT**: CI runs take a few seconds to appear after a push. You MUST wait and retry before concluding there are no runs. Use the following approach:
 
 ```bash
-gh run list --branch $(git branch --show-current) --limit 5
+# Wait 5 seconds for GitHub to register the run, then check
+sleep 5 && gh run list --branch $(git branch --show-current) --limit 5 --json databaseId,name,status,conclusion,event,createdAt
 ```
 
-Wait for the most recent run to complete. Poll with:
+If the list is empty, wait another 10 seconds and retry **once more**:
+
+```bash
+sleep 10 && gh run list --branch $(git branch --show-current) --limit 5 --json databaseId,name,status,conclusion,event,createdAt
+```
+
+Only if the list is still empty after the second attempt, you may skip CI monitoring and proceed to Step 5.
+
+Once you see a run, wait for it to complete. Poll with:
 
 ```bash
 gh run watch <run-id> --exit-status
 ```
 
 Use `--exit-status` so the command exits with non-zero if the run fails. Set a reasonable timeout (10 minutes).
-
-If no CI workflows are found (e.g., only backend files changed and the push didn't trigger anything), skip to Step 5 (merge conflicts check).
 
 ### Step 4: Handle CI failures
 
