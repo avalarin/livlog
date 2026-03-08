@@ -19,11 +19,15 @@ extension View {
 
     @ViewBuilder
     func glassOrMaterial<S: Shape>(in shape: S) -> some View {
+        #if compiler(>=6.1)
         if #available(iOS 26, *) {
             self.glassEffect(in: shape)
         } else {
             self.background(.thinMaterial, in: shape)
         }
+        #else
+        self.background(.thinMaterial, in: shape)
+        #endif
     }
 
     @ViewBuilder
