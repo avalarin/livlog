@@ -279,7 +279,7 @@ struct AddEditCollectionView: View {
         var id: String {
             switch self {
             case .add: return "add"
-            case .edit(let c): return "edit-\(c.id)"
+            case .edit(let collection): return "edit-\(collection.id)"
             }
         }
     }
@@ -315,7 +315,7 @@ struct AddEditCollectionView: View {
     }
 
     private var editingCollection: CollectionModel? {
-        if case .edit(let c) = mode { return c }
+        if case .edit(let collection) = mode { return collection }
         return nil
     }
 
@@ -635,7 +635,7 @@ struct AddEditCollectionView: View {
 
 struct ShareCollectionSheet: View {
     let collection: CollectionModel
-    var onDone: (() -> Void)? = nil
+    var onDone: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var email = ""
@@ -730,7 +730,7 @@ struct ShareCollectionSheet: View {
 struct EditMemberSheet: View {
     let collection: CollectionModel
     let member: CollectionMember
-    var onDone: (() -> Void)? = nil
+    var onDone: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var role: CollectionRole

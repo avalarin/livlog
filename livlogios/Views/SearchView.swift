@@ -15,7 +15,7 @@ struct SearchView: View {
     @State private var path = NavigationPath()
     @State private var query = ""
     /// nil = not yet searched; [] = searched, no results; non-empty = results
-    @State private var results: [EntryModel]? = nil
+    @State private var results: [EntryModel]?
     @State private var isLoading = false
     @State private var searchTask: Task<Void, Never>?
     @State private var errorMessage: String?

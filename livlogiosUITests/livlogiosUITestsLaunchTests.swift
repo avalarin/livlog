@@ -7,7 +7,7 @@
 
 import XCTest
 
-final class livlogiosUITestsLaunchTests: XCTestCase {
+final class livlogiosUITestsLaunchTests: XCTestCase { // swiftlint:disable:this type_name
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

@@ -14,7 +14,7 @@ private actor AsyncSemaphore {
     init(count: Int) { self.count = count }
 
     func wait() async {
-        if count > 0 {
+        if count > 0 { // swiftlint:disable:this empty_count
             count -= 1
             return
         }
