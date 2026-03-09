@@ -72,6 +72,7 @@ func main() {
 	typeRepo := repository.NewTypeRepository(db.Pool)
 	aiSearchUsageRepo := repository.NewAISearchUsageRepository(db.Pool)
 	mcpRepo := repository.NewMCPRepository(db.Pool)
+	tagRepo := repository.NewTagRepository(db.Pool)
 
 	// Seed cover images with fixed UUIDs
 	log.Info("seeding cover images")
@@ -134,7 +135,7 @@ func main() {
 	typeHandler := handler.NewTypeHandler(typeService, log)
 	aiSearchHandler := handler.NewAISearchHandler(aiSearchService, log)
 	mcpHandler := handler.NewMCPHandler(mcpService, log)
-	mcpProtocolHandler := handler.NewMCPProtocolHandler(mcpService, collectionService, entryService, typeService, log)
+	mcpProtocolHandler := handler.NewMCPProtocolHandler(mcpService, collectionService, entryService, typeService, tagRepo, log)
 
 	// Setup router
 	r := chi.NewRouter()

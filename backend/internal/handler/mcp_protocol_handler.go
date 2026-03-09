@@ -2,10 +2,13 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,13 +21,18 @@ import (
 	"github.com/avalarin/livlog/backend/internal/service"
 )
 
-const maxAddEntriesBatch = 100
+const (
+	maxAddEntriesBatch = 100
+	maxImageBytes      = 5 << 20 // 5 MB
+	maxImagesPerEntry  = 3
+)
 
 type MCPProtocolHandler struct {
 	mcpService        *service.MCPService
 	collectionService *service.CollectionService
 	entryService      *service.EntryService
 	typeService       *service.TypeService
+	tagRepo           *repository.TagRepository
 	log               *zap.Logger
 }
 
@@ -33,6 +41,7 @@ func NewMCPProtocolHandler(
 	collectionService *service.CollectionService,
 	entryService *service.EntryService,
 	typeService *service.TypeService,
+	tagRepo *repository.TagRepository,
 	log *zap.Logger,
 ) *MCPProtocolHandler {
 	return &MCPProtocolHandler{
@@ -40,6 +49,7 @@ func NewMCPProtocolHandler(
 		collectionService: collectionService,
 		entryService:      entryService,
 		typeService:       typeService,
+		tagRepo:           tagRepo,
 		log:               log,
 	}
 }
@@ -82,6 +92,211 @@ func entryToResult(e *repository.Entry) mcpEntryResult {
 	return r
 }
 
+// downloadImage fetches the image at rawURL and returns its bytes.
+// Only http/https schemes are allowed. The body is limited to maxBytes.
+func downloadImage(ctx context.Context, rawURL string, maxBytes int64) ([]byte, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme %q: only http and https are allowed", parsed.Scheme)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download image: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("image URL returned HTTP %d", resp.StatusCode)
+	}
+
+	// LimitReader: read up to maxBytes+1 so we can detect an oversize body.
+	limited := io.LimitReader(resp.Body, maxBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image body: %w", err)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("image exceeds maximum size of %d bytes", maxBytes)
+	}
+
+	return data, nil
+}
+
+// imageInput is the per-image payload accepted by add-entries and edit-entry.
+type imageInput struct {
+	URL  string `json:"url"`
+	Data string `json:"data"`
+}
+
+// parseImages converts a raw JSON-marshallable value (from MCP args) into
+// []repository.EntryImage. At most maxImagesPerEntry images are accepted.
+func parseImages(ctx context.Context, raw interface{}) ([]repository.EntryImage, error) {
+	if raw == nil {
+		return nil, nil
+	}
+
+	rawJSON, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process images: %w", err)
+	}
+
+	var inputs []imageInput
+	if err := json.Unmarshal(rawJSON, &inputs); err != nil {
+		return nil, fmt.Errorf("images must be an array of objects with url or data fields")
+	}
+
+	if len(inputs) > maxImagesPerEntry {
+		return nil, fmt.Errorf("too many images: maximum %d per entry", maxImagesPerEntry)
+	}
+
+	images := make([]repository.EntryImage, 0, len(inputs))
+	for i, inp := range inputs {
+		var data []byte
+
+		switch {
+		case inp.URL != "":
+			downloaded, err := downloadImage(ctx, inp.URL, maxImageBytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch image %d from URL: %w", i, err)
+			}
+			data = downloaded
+
+		case inp.Data != "":
+			decoded, err := base64.StdEncoding.DecodeString(inp.Data)
+			if err != nil {
+				return nil, fmt.Errorf("image %d: invalid base64 data: %w", i, err)
+			}
+			if int64(len(decoded)) > maxImageBytes {
+				return nil, fmt.Errorf("image %d exceeds maximum size of %d bytes", i, maxImageBytes)
+			}
+			data = decoded
+
+		default:
+			return nil, fmt.Errorf("image %d must have either url or data field", i)
+		}
+
+		images = append(images, repository.EntryImage{
+			ImageData: data,
+			IsCover:   i == 0,
+			Position:  i,
+		})
+	}
+
+	return images, nil
+}
+
+// mcpToolDefs holds the MCP tool definitions (name, description, input schema).
+// These are shared between handleMCP (which pairs each tool with a real handler)
+// and the eval test (which reads the schemas to build OpenAI tool definitions).
+var mcpToolDefs = struct {
+	GetCollections mcp.Tool
+	GetEntryTypes  mcp.Tool
+	AddEntries     mcp.Tool
+	FindEntries    mcp.Tool
+	EditEntry      mcp.Tool
+}{
+	GetCollections: mcp.NewTool("get-collections",
+		mcp.WithDescription("Get all collections for the authenticated user"),
+	),
+	GetEntryTypes: mcp.NewTool("get-entry-types",
+		mcp.WithDescription("Get all available entry types (system-wide and user-defined). Call this before add-entries to pick the right type_id and know which additional_fields keys are supported for that type."),
+	),
+	AddEntries: mcp.NewTool("add-entries",
+		mcp.WithDescription("Add one or more entries to a collection (max 100 per call). Call get-entry-types first to pick a type_id and discover which additional_fields keys are available for that type."),
+		mcp.WithString("collection_id",
+			mcp.Required(),
+			mcp.Description("UUID of the collection to add entries to"),
+		),
+		mcp.WithArray("entries",
+			mcp.Required(),
+			mcp.Description(`Array of entries to add. Each entry: {"title": string (required), "description": string (optional, defaults to title), "type_id": string UUID (required — use get-entry-types to find the right type), "score": 0-3 (optional, default 0; 0 = new/haven't watched/read/played yet, 1 = bad, 2 = okay, 3 = great), "date": "YYYY-MM-DD" (optional — the watch/read/play date, defaults to today), "additional_fields": {"key": "value"} (optional — keys come from the type's fields list returned by get-entry-types), "images": [{"url": "https://..."} or {"data": "<base64>"}] (optional, max 3, max 5MB each — first image becomes the cover)}`),
+			mcp.Items(map[string]any{"type": "object"}),
+		),
+	),
+	FindEntries: mcp.NewTool("find-entries",
+		mcp.WithDescription("Find entries by ID, or list/search within a collection by title. Use this to look up just-created entries or verify what's in a collection."),
+		mcp.WithString("id",
+			mcp.Description("Entry UUID — return exactly this entry. If provided, all other parameters are ignored."),
+		),
+		mcp.WithString("collection_id",
+			mcp.Description("Filter entries to this collection UUID. Optional when searching by name."),
+		),
+		mcp.WithString("name",
+			mcp.Description("Case-insensitive substring to match against entry titles."),
+		),
+		mcp.WithNumber("limit",
+			mcp.Description("Maximum number of results to return (1-100, default 20)."),
+		),
+	),
+	EditEntry: mcp.NewTool("edit-entry",
+		mcp.WithDescription(`Update an existing entry by ID using patch semantics.
+
+PATCH RULES:
+- Top-level fields (title, description, type_id, collection_id, score, date): omit to keep current value, provide to replace it.
+- additional_fields: MERGED into the existing map — existing keys not mentioned are preserved. To remove a key use additional_fields_delete.
+
+EXAMPLES:
+
+1. Update score only:
+   {"id": "<uuid>", "score": 3}
+
+2. Correct a typo in the title and set the watch date:
+   {"id": "<uuid>", "title": "Inception", "date": "2024-03-15"}
+
+3. Add/update one additional field without touching others, and remove an outdated field:
+   {"id": "<uuid>", "additional_fields": {"Year": "2010"}, "additional_fields_delete": ["OldField"]}
+
+4. Remove the entry from its collection (un-assign):
+   {"id": "<uuid>", "collection_id_clear": true}`),
+		mcp.WithString("id",
+			mcp.Required(),
+			mcp.Description("UUID of the entry to edit"),
+		),
+		mcp.WithString("title",
+			mcp.Description("New title (1-200 chars)"),
+		),
+		mcp.WithString("description",
+			mcp.Description("New description (1-2000 chars)"),
+		),
+		mcp.WithString("type_id",
+			mcp.Description("New type UUID — use get-entry-types to find valid values"),
+		),
+		mcp.WithString("collection_id",
+			mcp.Description("New collection UUID to move the entry to. To remove the entry from all collections use collection_id_clear instead."),
+		),
+		mcp.WithBoolean("collection_id_clear",
+			mcp.Description("Set to true to remove the entry from its current collection. Takes precedence over collection_id."),
+		),
+		mcp.WithNumber("score",
+			mcp.Description("New score: 0 = new/haven't watched/read/played yet, 1 = bad, 2 = okay, 3 = great"),
+		),
+		mcp.WithString("date",
+			mcp.Description("New watch/read/play date in YYYY-MM-DD format"),
+		),
+		mcp.WithObject("additional_fields",
+			mcp.Description("Key-value pairs to merge into the existing additional_fields map. Existing keys not listed here are preserved."),
+		),
+		mcp.WithArray("additional_fields_delete",
+			mcp.Description("List of additional_fields keys to remove. Applied after the merge of additional_fields."),
+			mcp.WithStringItems(),
+		),
+		mcp.WithArray("images",
+			mcp.Description(`Replacement images for the entry (max 3, max 5MB each). Each element: {"url": "https://..."} or {"data": "<base64>"}. First image becomes the cover. Replaces all existing images when provided.`),
+			mcp.Items(map[string]any{"type": "object"}),
+		),
+	),
+}
+
 func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	uniqueCode := chi.URLParam(r, "unique_code")
 	if uniqueCode == "" {
@@ -100,13 +315,16 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up the "mcp" system tag once per request; log a warning if missing.
+	mcpTag, mcpTagErr := h.tagRepo.GetSystemTagByName(r.Context(), "mcp")
+	if mcpTagErr != nil {
+		h.log.Warn("mcp system tag not found — entries will not be auto-tagged", zap.Error(mcpTagErr))
+	}
+
 	mcpSrv := mcpserver.NewMCPServer("livlog", "1.0.0")
 
 	// Register get-collections tool
-	getCollectionsTool := mcp.NewTool("get-collections",
-		mcp.WithDescription("Get all collections for the authenticated user"),
-	)
-	mcpSrv.AddTool(getCollectionsTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	mcpSrv.AddTool(mcpToolDefs.GetCollections, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		collections, err := h.collectionService.GetCollectionsByUserID(ctx, userID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get collections: %w", err)
@@ -138,10 +356,7 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Register get-entry-types tool
-	getEntryTypesTool := mcp.NewTool("get-entry-types",
-		mcp.WithDescription("Get all available entry types (system-wide and user-defined). Call this before add-entries to pick the right type_id and know which additional_fields keys are supported for that type."),
-	)
-	mcpSrv.AddTool(getEntryTypesTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	mcpSrv.AddTool(mcpToolDefs.GetEntryTypes, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		types, err := h.typeService.GetAllTypes(ctx, userID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry types: %w", err)
@@ -182,18 +397,7 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Register add-entries tool
-	addEntriesTool := mcp.NewTool("add-entries",
-		mcp.WithDescription("Add one or more entries to a collection (max 100 per call). Call get-entry-types first to pick a type_id and discover which additional_fields keys are available for that type."),
-		mcp.WithString("collection_id",
-			mcp.Required(),
-			mcp.Description("UUID of the collection to add entries to"),
-		),
-		mcp.WithArray("entries",
-			mcp.Required(),
-			mcp.Description(`Array of entries to add. Each entry: {"title": string (required), "description": string (optional, defaults to title), "type_id": string UUID (required — use get-entry-types to find the right type), "score": 0-3 (optional, default 0), "date": "YYYY-MM-DD" (optional — the watch/read/play date, defaults to today), "additional_fields": {"key": "value"} (optional — keys come from the type's fields list returned by get-entry-types)}`),
-		),
-	)
-	mcpSrv.AddTool(addEntriesTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	mcpSrv.AddTool(mcpToolDefs.AddEntries, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, ok := req.Params.Arguments.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("invalid arguments format")
@@ -230,6 +434,7 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 			Score            int               `json:"score"`
 			Date             string            `json:"date"`
 			AdditionalFields map[string]string `json:"additional_fields"`
+			Images           interface{}       `json:"images"`
 		}
 
 		var entries []entryInput
@@ -285,6 +490,11 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 				additionalFields = map[string]string{}
 			}
 
+			images, err := parseImages(ctx, e.Images)
+			if err != nil {
+				return nil, fmt.Errorf("invalid images for entry %q: %w", e.Title, err)
+			}
+
 			entry, err := h.entryService.CreateEntry(
 				ctx,
 				userID,
@@ -295,11 +505,21 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 				score,
 				date,
 				additionalFields,
-				nil,
+				images,
 				nil,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create entry %q: %w", e.Title, err)
+			}
+
+			// Auto-tag entry with the "mcp" system tag.
+			if mcpTag != nil {
+				if tagErr := h.tagRepo.AddTagToEntry(ctx, entry.ID, mcpTag.ID); tagErr != nil {
+					h.log.Warn("failed to auto-tag entry with mcp tag",
+						zap.String("entry_id", entry.ID.String()),
+						zap.Error(tagErr),
+					)
+				}
 			}
 
 			createdIDs = append(createdIDs, entry.ID.String())
@@ -318,22 +538,7 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Register find-entries tool
-	findEntriesTool := mcp.NewTool("find-entries",
-		mcp.WithDescription("Find entries by ID, or list/search within a collection by title. Use this to look up just-created entries or verify what's in a collection."),
-		mcp.WithString("id",
-			mcp.Description("Entry UUID — return exactly this entry. If provided, all other parameters are ignored."),
-		),
-		mcp.WithString("collection_id",
-			mcp.Description("Filter entries to this collection UUID. Optional when searching by name."),
-		),
-		mcp.WithString("name",
-			mcp.Description("Case-insensitive substring to match against entry titles."),
-		),
-		mcp.WithNumber("limit",
-			mcp.Description("Maximum number of results to return (1-100, default 20)."),
-		),
-	)
-	mcpSrv.AddTool(findEntriesTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	mcpSrv.AddTool(mcpToolDefs.FindEntries, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, ok := req.Params.Arguments.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("invalid arguments format")
@@ -442,59 +647,7 @@ func (h *MCPProtocolHandler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Register edit-entry tool
-	editEntryTool := mcp.NewTool("edit-entry",
-		mcp.WithDescription(`Update an existing entry by ID using patch semantics.
-
-PATCH RULES:
-- Top-level fields (title, description, type_id, collection_id, score, date): omit to keep current value, provide to replace it.
-- additional_fields: MERGED into the existing map — existing keys not mentioned are preserved. To remove a key use additional_fields_delete.
-
-EXAMPLES:
-
-1. Update score only:
-   {"id": "<uuid>", "score": 3}
-
-2. Correct a typo in the title and set the watch date:
-   {"id": "<uuid>", "title": "Inception", "date": "2024-03-15"}
-
-3. Add/update one additional field without touching others, and remove an outdated field:
-   {"id": "<uuid>", "additional_fields": {"Year": "2010"}, "additional_fields_delete": ["OldField"]}
-
-4. Remove the entry from its collection (un-assign):
-   {"id": "<uuid>", "collection_id_clear": true}`),
-		mcp.WithString("id",
-			mcp.Required(),
-			mcp.Description("UUID of the entry to edit"),
-		),
-		mcp.WithString("title",
-			mcp.Description("New title (1-200 chars)"),
-		),
-		mcp.WithString("description",
-			mcp.Description("New description (1-2000 chars)"),
-		),
-		mcp.WithString("type_id",
-			mcp.Description("New type UUID — use get-entry-types to find valid values"),
-		),
-		mcp.WithString("collection_id",
-			mcp.Description("New collection UUID to move the entry to. To remove the entry from all collections use collection_id_clear instead."),
-		),
-		mcp.WithBoolean("collection_id_clear",
-			mcp.Description("Set to true to remove the entry from its current collection. Takes precedence over collection_id."),
-		),
-		mcp.WithNumber("score",
-			mcp.Description("New score: 0, 1, 2, or 3"),
-		),
-		mcp.WithString("date",
-			mcp.Description("New watch/read/play date in YYYY-MM-DD format"),
-		),
-		mcp.WithObject("additional_fields",
-			mcp.Description("Key-value pairs to merge into the existing additional_fields map. Existing keys not listed here are preserved."),
-		),
-		mcp.WithArray("additional_fields_delete",
-			mcp.Description("List of additional_fields keys to remove. Applied after the merge of additional_fields."),
-		),
-	)
-	mcpSrv.AddTool(editEntryTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	mcpSrv.AddTool(mcpToolDefs.EditEntry, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, ok := req.Params.Arguments.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("invalid arguments format")
@@ -612,6 +765,16 @@ EXAMPLES:
 			}
 		}
 
+		// Parse images if provided; nil means "don't touch existing images".
+		var images []repository.EntryImage
+		if imagesRaw, hasImages := args["images"]; hasImages {
+			parsed, err := parseImages(ctx, imagesRaw)
+			if err != nil {
+				return nil, fmt.Errorf("invalid images: %w", err)
+			}
+			images = parsed
+		}
+
 		updated, err := h.entryService.UpdateEntry(
 			ctx,
 			entryUUID,
@@ -623,7 +786,7 @@ EXAMPLES:
 			score,
 			date,
 			additionalFields,
-			nil,
+			images,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update entry: %w", err)

@@ -18,6 +18,11 @@ test-coverage:
     go test -v -race -coverprofile=coverage.out ./...
     go tool cover -html=coverage.out -o coverage.html
 
+# Run MCP evaluation tests (requires OPENROUTER_API_KEY)
+mcp-eval:
+    OPENROUTER_API_KEY=$(op read op://Private/openrouter/api-keys/livlog-eval) \
+    go test -tags eval -v -run TestMCP_Eval ./internal/handler/ -timeout 5m -count=1
+
 # Run linter
 lint:
     golangci-lint run ./...
