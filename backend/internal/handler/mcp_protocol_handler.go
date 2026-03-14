@@ -224,13 +224,21 @@ var mcpToolDefs = struct {
 				"type": "object",
 				"properties": map[string]any{
 					"title":       map[string]any{"type": "string", "description": "Entry title (required)"},
-					"description": map[string]any{"type": "string", "description": "Entry description (optional, defaults to title)"},
+					"description": map[string]any{"type": "string", "description": "Short user note (optional, defaults to title). Do NOT put metadata here — use additional_fields for director, author, year, etc."},
 					"type_id":     map[string]any{"type": "string", "description": "Entry type UUID (required)"},
 					"score":       map[string]any{"type": "number", "description": "0 = new/haven't watched/read/played yet, 1 = bad, 2 = okay, 3 = great"},
 					"date":        map[string]any{"type": "string", "description": "Watch/read/play date in YYYY-MM-DD format (defaults to today)"},
 					"additional_fields": map[string]any{
 						"type":        "object",
-						"description": "Structured metadata — ALWAYS use this for known attributes like Director, Author, Year, Developer etc. instead of putting them into description text",
+						"description": "REQUIRED for metadata. Put attributes like director, author, year here — NEVER in the description field.",
+						"properties": map[string]any{
+							"Director":  map[string]any{"type": "string"},
+							"Author":    map[string]any{"type": "string"},
+							"Year":      map[string]any{"type": "string"},
+							"Developer": map[string]any{"type": "string"},
+							"Genre":     map[string]any{"type": "string"},
+						},
+						"additionalProperties": map[string]any{"type": "string"},
 					},
 					"images": map[string]any{
 						"type":        "array",

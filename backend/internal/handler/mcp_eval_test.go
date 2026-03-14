@@ -763,14 +763,11 @@ func TestMCP_Eval(t *testing.T) {
 func runScenario(t *testing.T, apiKey, model string, scenario evalScenario) bool {
 	t.Helper()
 
-	prompt := scenario.Prompt
+	messages := []chatMessage{}
 	if scenario.System != "" {
-		prompt += "\n\nContext: " + scenario.System
+		messages = append(messages, chatMessage{Role: "system", Content: strPtr(scenario.System)})
 	}
-
-	messages := []chatMessage{
-		{Role: "user", Content: strPtr(prompt)},
-	}
+	messages = append(messages, chatMessage{Role: "user", Content: strPtr(scenario.Prompt)})
 
 	allOK := true
 
