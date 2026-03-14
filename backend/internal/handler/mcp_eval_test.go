@@ -756,6 +756,10 @@ func TestMCP_Eval(t *testing.T) {
 			fmt.Printf("  RESULT: %s  %d/%d scenarios passed (%.1f%%)\n", model, passed, total, pct)
 			fmt.Println("--------------------------------------------------------------------------------")
 			fmt.Println()
+
+			if passed < total {
+				t.Errorf("%s: %d/%d scenarios failed", model, total-passed, total)
+			}
 		})
 	}
 }
