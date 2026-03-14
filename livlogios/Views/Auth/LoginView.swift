@@ -77,20 +77,23 @@ struct LoginView: View {
                 .padding(.horizontal, 40)
 
                 // Apple Sign In
-                if isLoading {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                } else {
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.email, .fullName]
-                    } onCompletion: { result in
-                        handleAppleSignIn(result)
-                    }
-                    .signInWithAppleButtonStyle(.black)
-                    .frame(height: 50)
-                    .padding(.horizontal, 40)
-                    .cornerRadius(8)
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = [.email, .fullName]
+                } onCompletion: { result in
+                    handleAppleSignIn(result)
                 }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 50)
+                .padding(.horizontal, 40)
+                .cornerRadius(8)
+                .opacity(isLoading ? 0 : 1)
+                .overlay {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                    }
+                }
+                .allowsHitTesting(!isLoading)
 
                 ServerInfoView(
                     connectionMonitor: connectionMonitor,

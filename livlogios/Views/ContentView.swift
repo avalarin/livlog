@@ -60,8 +60,12 @@ struct ContentView: View {
         do {
             async let entriesTask = EntryService.shared.getEntries(collectionID: collection.id)
             async let typesTask = TypeService.shared.getTypes()
-            items = try await entriesTask
-            types = try await typesTask
+            let newItems = try await entriesTask
+            let newTypes = try await typesTask
+            withAnimation(.easeInOut(duration: 0.3)) {
+                items = newItems
+                types = newTypes
+            }
             selectedIDs.removeAll()
         } catch is CancellationError {
             return
@@ -183,6 +187,148 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var gridContent: some View {
+        LazyVGrid(columns: gridColumns, spacing: 12) {
+            ForEach(items) { item in
+                let entryType = types.first { $0.id == item.typeID }
+                if isSelectMode {
+                    Button {
+                        if selectedIDs.contains(item.id) {
+                            selectedIDs.remove(item.id)
+                        } else {
+                            selectedIDs.insert(item.id)
+                        }
+                    } label: {
+                        EntryCard(
+                            item: item,
+                            entryType: entryType,
+                            onDelete: { await deleteEntry(item) },
+                            isSelectMode: true,
+                            isSelected: selectedIDs.contains(item.id),
+                            canWrite: collection.myRole.canWrite
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink(destination: EntryDetailView(
+                        entryID: item.id, myRole: collection.myRole
+                    )) {
+                        EntryCard(
+                            item: item,
+                            entryType: entryType,
+                            onDelete: { await deleteEntry(item) },
+                            isSelectMode: false,
+                            isSelected: false,
+                            canWrite: collection.myRole.canWrite
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        LazyVStack(spacing: 8) {
+            ForEach(items) { item in
+                let entryType = types.first { $0.id == item.typeID }
+                if isSelectMode {
+                    Button {
+                        if selectedIDs.contains(item.id) {
+                            selectedIDs.remove(item.id)
+                        } else {
+                            selectedIDs.insert(item.id)
+                        }
+                    } label: {
+                        EntryListRow(
+                            item: item,
+                            entryType: entryType,
+                            onDelete: { await deleteEntry(item) },
+                            isSelectMode: true,
+                            isSelected: selectedIDs.contains(item.id),
+                            canWrite: collection.myRole.canWrite
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink(destination: EntryDetailView(
+                        entryID: item.id, myRole: collection.myRole
+                    )) {
+                        EntryListRow(
+                            item: item,
+                            entryType: entryType,
+                            onDelete: { await deleteEntry(item) },
+                            isSelectMode: false,
+                            isSelected: false,
+                            canWrite: collection.myRole.canWrite
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var scrollContent: some View {
+        if items.isEmpty && hasLoaded {
+            EmptyStateView(showingAddEntry: $showingAddEntry, canWrite: collection.myRole.canWrite)
+                .frame(maxWidth: .infinity)
+                .containerRelativeFrame(.vertical, alignment: .center)
+        } else {
+            LazyVStack(spacing: 0) {
+                if viewMode == .grid {
+                    gridContent
+                } else {
+                    listContent
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                containerWidth = width
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var addButton: some View {
+        if !isSelectMode && collection.myRole.canWrite && hasLoaded {
+            HStack {
+                Spacer()
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showingAddEntry = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(width: 48, height: 48)
+                        .background(Color.accentColor)
+                        .clipShape(Circle())
+                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private func handleEntryCreated(_ newEntry: EntryModel) {
+        withAnimation(.spring(response: 0.35)) {
+            items.insert(newEntry, at: 0)
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            await loadData()
+        }
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -196,135 +342,21 @@ struct ContentView: View {
             .ignoresSafeArea()
 
             ScrollView {
-                if items.isEmpty && hasLoaded {
-                    EmptyStateView(showingAddEntry: $showingAddEntry, canWrite: collection.myRole.canWrite)
-                        .frame(maxWidth: .infinity)
-                        .containerRelativeFrame(.vertical, alignment: .center)
-                } else {
-                    LazyVStack(spacing: 0) {
-                        if viewMode == .grid {
-                            LazyVGrid(columns: gridColumns, spacing: 12) {
-                                ForEach(items) { item in
-                                    let entryType = types.first { $0.id == item.typeID }
-                                    if isSelectMode {
-                                        Button {
-                                            if selectedIDs.contains(item.id) {
-                                                selectedIDs.remove(item.id)
-                                            } else {
-                                                selectedIDs.insert(item.id)
-                                            }
-                                        } label: {
-                                            EntryCard(
-                                                item: item,
-                                                entryType: entryType,
-                                                onDelete: { await deleteEntry(item) },
-                                                isSelectMode: true,
-                                                isSelected: selectedIDs.contains(item.id),
-                                                canWrite: collection.myRole.canWrite
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    } else {
-                                        NavigationLink(destination: EntryDetailView(
-                                            entryID: item.id, myRole: collection.myRole
-                                        )) {
-                                            EntryCard(
-                                                item: item,
-                                                entryType: entryType,
-                                                onDelete: { await deleteEntry(item) },
-                                                isSelectMode: false,
-                                                isSelected: false,
-                                                canWrite: collection.myRole.canWrite
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                        } else {
-                            LazyVStack(spacing: 8) {
-                                ForEach(items) { item in
-                                    let entryType = types.first { $0.id == item.typeID }
-                                    if isSelectMode {
-                                        Button {
-                                            if selectedIDs.contains(item.id) {
-                                                selectedIDs.remove(item.id)
-                                            } else {
-                                                selectedIDs.insert(item.id)
-                                            }
-                                        } label: {
-                                            EntryListRow(
-                                                item: item,
-                                                entryType: entryType,
-                                                onDelete: { await deleteEntry(item) },
-                                                isSelectMode: true,
-                                                isSelected: selectedIDs.contains(item.id),
-                                                canWrite: collection.myRole.canWrite
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    } else {
-                                        NavigationLink(destination: EntryDetailView(
-                                            entryID: item.id, myRole: collection.myRole
-                                        )) {
-                                            EntryListRow(
-                                                item: item,
-                                                entryType: entryType,
-                                                onDelete: { await deleteEntry(item) },
-                                                isSelectMode: false,
-                                                isSelected: false,
-                                                canWrite: collection.myRole.canWrite
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.width
-                    } action: { width in
-                        containerWidth = width
-                    }
-                            }
+                scrollContent
             }
             .refreshable {
                 await loadData()
             }
             .safeAreaInset(edge: .bottom) {
-                if !isSelectMode && collection.myRole.canWrite && hasLoaded {
-                    HStack {
-                        Spacer()
-                        Button {
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            showingAddEntry = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.white)
-                                .frame(width: 48, height: 48)
-                                .background(Color.accentColor)
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                }
+                addButton
             }
         }
         .navigationTitle(isSelectMode
             ? (selectedIDs.isEmpty ? "Select Entries" : "\(selectedIDs.count) Selected")
             : collection.name)
         .toolbar { toolbarContent }
-        .sheet(isPresented: $showingAddEntry, onDismiss: {
-            Task { await loadData() }
-        }) {
-            AddEntryView(collection: collection)
+        .sheet(isPresented: $showingAddEntry) {
+            AddEntryView(collection: collection, onEntryCreated: handleEntryCreated)
         }
         .fullScreenCover(isPresented: $showingSearch) {
             SearchView(types: types)
