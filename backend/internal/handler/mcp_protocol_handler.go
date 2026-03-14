@@ -209,27 +209,46 @@ var mcpToolDefs = struct {
 		mcp.WithDescription("Get all collections for the authenticated user"),
 	),
 	GetEntryTypes: mcp.NewTool("get-entry-types",
-		mcp.WithDescription("Get all available entry types (system-wide and user-defined). Call this before add-entries to pick the right type_id and know which additional_fields keys are supported for that type."),
+		mcp.WithDescription("Get all available entry types (system-wide and user-defined) with their fields. Call this only when you don't already know the type_id — if the type_id is provided in context, skip this step and use it directly."),
 	),
 	AddEntries: mcp.NewTool("add-entries",
-		mcp.WithDescription("Add one or more entries to a collection (max 100 per call). Call get-entry-types first to pick a type_id and discover which additional_fields keys are available for that type."),
+		mcp.WithDescription("Add one or more entries to a collection (max 100 per call). If you already know the type_id from context, use it directly — no need to call get-entry-types first."),
 		mcp.WithString("collection_id",
 			mcp.Required(),
 			mcp.Description("UUID of the collection to add entries to"),
 		),
 		mcp.WithArray("entries",
 			mcp.Required(),
-			mcp.Description(`Array of entries to add. Each entry: {"title": string (required), "description": string (optional, defaults to title), "type_id": string UUID (required — use get-entry-types to find the right type), "score": 0-3 (optional, default 0; 0 = new/haven't watched/read/played yet, 1 = bad, 2 = okay, 3 = great), "date": "YYYY-MM-DD" (optional — the watch/read/play date, defaults to today), "additional_fields": {"key": "value"} (optional — keys come from the type's fields list returned by get-entry-types), "images": [{"url": "https://..."} or {"data": "<base64>"}] (optional, max 3, max 5MB each — first image becomes the cover)}`),
-			mcp.Items(map[string]any{"type": "object"}),
+			mcp.Description("Array of entry objects to add"),
+			mcp.Items(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":       map[string]any{"type": "string", "description": "Entry title (required)"},
+					"description": map[string]any{"type": "string", "description": "Entry description (optional, defaults to title)"},
+					"type_id":     map[string]any{"type": "string", "description": "Entry type UUID (required)"},
+					"score":       map[string]any{"type": "number", "description": "0 = new/haven't watched/read/played yet, 1 = bad, 2 = okay, 3 = great"},
+					"date":        map[string]any{"type": "string", "description": "Watch/read/play date in YYYY-MM-DD format (defaults to today)"},
+					"additional_fields": map[string]any{
+						"type":        "object",
+						"description": "Structured metadata — ALWAYS use this for known attributes like Director, Author, Year, Developer etc. instead of putting them into description text",
+					},
+					"images": map[string]any{
+						"type":        "array",
+						"description": "Images: [{\"url\": \"https://...\"} or {\"data\": \"<base64>\"}] (max 3, max 5MB each, first = cover)",
+						"items":       map[string]any{"type": "object"},
+					},
+				},
+				"required": []string{"title", "type_id"},
+			}),
 		),
 	),
 	FindEntries: mcp.NewTool("find-entries",
-		mcp.WithDescription("Find entries by ID, or list/search within a collection by title. Use this to look up just-created entries or verify what's in a collection."),
+		mcp.WithDescription("Search for entries when you don't have their IDs. Provide at least one of: id, name, or collection_id. Not required before edit-entry — if you already have the entry ID, call edit-entry directly."),
 		mcp.WithString("id",
 			mcp.Description("Entry UUID — return exactly this entry. If provided, all other parameters are ignored."),
 		),
 		mcp.WithString("collection_id",
-			mcp.Description("Filter entries to this collection UUID. Optional when searching by name."),
+			mcp.Description("Narrow results to a specific collection. Not required — omit to search across all collections."),
 		),
 		mcp.WithString("name",
 			mcp.Description("Case-insensitive substring to match against entry titles."),
@@ -239,25 +258,9 @@ var mcpToolDefs = struct {
 		),
 	),
 	EditEntry: mcp.NewTool("edit-entry",
-		mcp.WithDescription(`Update an existing entry by ID using patch semantics.
+		mcp.WithDescription(`Update an existing entry by ID. Call this directly when you have the entry ID — no need to look it up with find-entries first.
 
-PATCH RULES:
-- Top-level fields (title, description, type_id, collection_id, score, date): omit to keep current value, provide to replace it.
-- additional_fields: MERGED into the existing map — existing keys not mentioned are preserved. To remove a key use additional_fields_delete.
-
-EXAMPLES:
-
-1. Update score only:
-   {"id": "<uuid>", "score": 3}
-
-2. Correct a typo in the title and set the watch date:
-   {"id": "<uuid>", "title": "Inception", "date": "2024-03-15"}
-
-3. Add/update one additional field without touching others, and remove an outdated field:
-   {"id": "<uuid>", "additional_fields": {"Year": "2010"}, "additional_fields_delete": ["OldField"]}
-
-4. Remove the entry from its collection (un-assign):
-   {"id": "<uuid>", "collection_id_clear": true}`),
+Patch semantics: omit a field to keep its current value, provide it to replace. additional_fields are MERGED (existing keys preserved); use additional_fields_delete to remove keys.`),
 		mcp.WithString("id",
 			mcp.Required(),
 			mcp.Description("UUID of the entry to edit"),
