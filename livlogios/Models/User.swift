@@ -13,6 +13,7 @@ struct User: Codable, Identifiable {
     let displayName: String?
     let emailVerified: Bool
     let authProviders: [String]
+    let onboardingCompleted: Bool
     let createdAt: Date
     let updatedAt: Date?
 
@@ -22,6 +23,7 @@ struct User: Codable, Identifiable {
         case displayName = "display_name"
         case emailVerified = "email_verified"
         case authProviders = "auth_providers"
+        case onboardingCompleted = "onboarding_completed"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }

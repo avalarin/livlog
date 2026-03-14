@@ -18,8 +18,12 @@ struct livlogiosApp: App { // swiftlint:disable:this type_name
                 if appState.isCheckingAuth {
                     ProgressView()
                 } else if appState.isAuthenticated {
-                    CollectionsView()
-                        .connectionToast(monitor: connectionMonitor)
+                    if appState.needsOnboarding {
+                        OnboardingView()
+                    } else {
+                        CollectionsView()
+                            .connectionToast(monitor: connectionMonitor)
+                    }
                 } else {
                     LoginView()
                 }

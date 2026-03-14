@@ -31,12 +31,69 @@ extension View {
     }
 
     @ViewBuilder
+    func glassOrMaterialInteractive<S: Shape>(in shape: S) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26, *) {
+            self.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            self.background(.thinMaterial, in: shape)
+        }
+        #else
+        self.background(.thinMaterial, in: shape)
+        #endif
+    }
+
+    @ViewBuilder
+    func glassOrFillInteractive<S: Shape>(in shape: S, color: Color) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26, *) {
+            self.glassEffect(.regular.interactive().tint(color), in: shape)
+        } else {
+            self.background(color, in: shape)
+        }
+        #else
+        self.background(color, in: shape)
+        #endif
+    }
+
+    @ViewBuilder
     func shimmerLoading(_ isLoading: Bool) -> some View {
         if isLoading {
             modifier(ShimmerModifier())
         } else {
             self
         }
+    }
+}
+
+// MARK: - Glass Button Style Helpers
+
+extension View {
+    @ViewBuilder
+    func glassOrMaterialButtonStyle() -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
+        }
+        #else
+        self.buttonStyle(.bordered)
+        #endif
+    }
+
+    @ViewBuilder
+    func glassOrFillButtonStyle() -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26, *) {
+            self.buttonStyle(.glassProminent)
+                .tint(.accentColor)
+        } else {
+            self.buttonStyle(.borderedProminent)
+        }
+        #else
+        self.buttonStyle(.borderedProminent)
+        #endif
     }
 }
 

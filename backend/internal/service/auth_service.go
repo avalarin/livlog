@@ -41,13 +41,14 @@ type AuthResponse struct {
 }
 
 type User struct {
-	ID            string   `json:"id"`
-	Email         *string  `json:"email,omitempty"`
-	EmailVerified bool     `json:"email_verified"`
-	DisplayName   *string  `json:"display_name,omitempty"`
-	AuthProviders []string `json:"auth_providers"`
-	CreatedAt     string   `json:"created_at"`
-	UpdatedAt     *string  `json:"updated_at,omitempty"`
+	ID                  string   `json:"id"`
+	Email               *string  `json:"email,omitempty"`
+	EmailVerified       bool     `json:"email_verified"`
+	DisplayName         *string  `json:"display_name,omitempty"`
+	AuthProviders       []string `json:"auth_providers"`
+	OnboardingCompleted bool     `json:"onboarding_completed"`
+	CreatedAt           string   `json:"created_at"`
+	UpdatedAt           *string  `json:"updated_at,omitempty"`
 }
 
 func NewAuthService(
@@ -273,13 +274,14 @@ func buildDisplayName(fullName *PersonNameComponents) string {
 func mapUserToResponse(user *repository.User, providers []string) *User {
 	updatedAt := user.UpdatedAt.Format(time.RFC3339)
 	return &User{
-		ID:            user.ID.String(),
-		Email:         user.Email,
-		EmailVerified: user.EmailVerified,
-		DisplayName:   coalesceStringPtr(user.DisplayName, user.Email),
-		AuthProviders: providers,
-		CreatedAt:     user.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:     &updatedAt,
+		ID:                  user.ID.String(),
+		Email:               user.Email,
+		EmailVerified:       user.EmailVerified,
+		DisplayName:         coalesceStringPtr(user.DisplayName, user.Email),
+		AuthProviders:       providers,
+		OnboardingCompleted: user.OnboardingCompleted,
+		CreatedAt:           user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:           &updatedAt,
 	}
 }
 

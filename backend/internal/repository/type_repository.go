@@ -126,6 +126,42 @@ func (r *TypeRepository) GetTypeByID(
 	return &t, nil
 }
 
+// GetSystemTypeByName retrieves a system entry type by its name (user_id IS NULL).
+func (r *TypeRepository) GetSystemTypeByName(
+	ctx context.Context,
+	name string,
+) (*EntryType, error) {
+	query := `
+		SELECT id, user_id, name, icon, fields, created_at, updated_at
+		FROM entry_types
+		WHERE name = $1 AND user_id IS NULL
+	`
+
+	var t EntryType
+	var fieldsStr string
+	err := r.db.QueryRow(ctx, query, name).Scan(
+		&t.ID,
+		&t.UserID,
+		&t.Name,
+		&t.Icon,
+		&fieldsStr,
+		&t.CreatedAt,
+		&t.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTypeNotFound
+		}
+		return nil, fmt.Errorf("failed to get system type by name: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(fieldsStr), &t.Fields); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal type fields: %w", err)
+	}
+
+	return &t, nil
+}
+
 // CreateType creates a new user-owned entry type.
 func (r *TypeRepository) CreateType(
 	ctx context.Context,

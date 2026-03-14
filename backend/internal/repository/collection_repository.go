@@ -19,17 +19,20 @@ var (
 )
 
 type Collection struct {
-	ID          uuid.UUID `json:"id"`
-	UserID      uuid.UUID `json:"user_id"`
-	Name        string    `json:"name"`
-	Icon        string    `json:"icon"`
-	Color       string    `json:"color"`
-	EntryCount  int       `json:"entry_count"`
-	MemberCount int       `json:"member_count"`
-	MyRole      string    `json:"my_role"`
-	SharedBy    *string   `json:"shared_by,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uuid.UUID  `json:"id"`
+	UserID      *uuid.UUID `json:"user_id,omitempty"`
+	Name        string     `json:"name"`
+	Icon        string     `json:"icon"`
+	Color       string     `json:"color"`
+	IsTemplate  bool       `json:"is_template"`
+	Slug        *string    `json:"slug,omitempty"`
+	Description string     `json:"description"`
+	EntryCount  int        `json:"entry_count"`
+	MemberCount int        `json:"member_count"`
+	MyRole      string     `json:"my_role"`
+	SharedBy    *string    `json:"shared_by,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 type CollectionMember struct {
@@ -455,6 +458,83 @@ func (r *CollectionRepository) HasCollections(
 	}
 
 	return exists, nil
+}
+
+// GetTemplateCollections returns all template collections ordered by name.
+func (r *CollectionRepository) GetTemplateCollections(
+	ctx context.Context,
+) ([]*Collection, error) {
+	query := `
+		SELECT id, name, icon, color, slug, description, created_at, updated_at
+		FROM collections
+		WHERE is_template = true
+		ORDER BY created_at ASC
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query template collections: %w", err)
+	}
+	defer rows.Close()
+
+	var collections []*Collection
+	for rows.Next() {
+		var c Collection
+		err := rows.Scan(
+			&c.ID,
+			&c.Name,
+			&c.Icon,
+			&c.Color,
+			&c.Slug,
+			&c.Description,
+			&c.CreatedAt,
+			&c.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan template collection: %w", err)
+		}
+		c.IsTemplate = true
+		collections = append(collections, &c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating template collections: %w", err)
+	}
+
+	return collections, nil
+}
+
+// GetTemplateBySlug retrieves a template collection by its slug.
+func (r *CollectionRepository) GetTemplateBySlug(
+	ctx context.Context,
+	slug string,
+) (*Collection, error) {
+	query := `
+		SELECT id, name, icon, color, slug, description, created_at, updated_at
+		FROM collections
+		WHERE is_template = true AND slug = $1
+	`
+
+	var c Collection
+	err := r.db.QueryRow(ctx, query, slug).Scan(
+		&c.ID,
+		&c.Name,
+		&c.Icon,
+		&c.Color,
+		&c.Slug,
+		&c.Description,
+		&c.CreatedAt,
+		&c.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrCollectionNotFound
+		}
+		return nil, fmt.Errorf("failed to get template by slug: %w", err)
+	}
+	c.IsTemplate = true
+
+	return &c, nil
 }
 
 // isUniqueViolation checks if an error is a PostgreSQL unique constraint violation (code 23505).

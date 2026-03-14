@@ -41,4 +41,12 @@ class AppState: ObservableObject {
         isAuthenticated = false
         currentUser = nil
     }
+
+    var needsOnboarding: Bool {
+        isAuthenticated && !(currentUser?.onboardingCompleted ?? true)
+    }
+
+    func completeOnboarding() async {
+        currentUser = try? await BackendService.shared.getCurrentUser()
+    }
 }

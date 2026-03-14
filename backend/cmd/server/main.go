@@ -126,6 +126,9 @@ func main() {
 		log.Fatal("failed to initialize AI search service", zap.Error(err))
 	}
 
+	// Initialize onboarding service
+	onboardingService := service.NewOnboardingService(userRepo, collectionRepo, entryRepo)
+
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler(db)
 	authHandler := handler.NewAuthHandler(authService, emailAuthService, log)
@@ -133,6 +136,7 @@ func main() {
 	entryHandler := handler.NewEntryHandler(entryService, log)
 	typeHandler := handler.NewTypeHandler(typeService, log)
 	aiSearchHandler := handler.NewAISearchHandler(aiSearchService, log)
+	onboardingHandler := handler.NewOnboardingHandler(onboardingService, log)
 	mcpHandler := handler.NewMCPHandler(mcpService, log)
 	mcpProtocolHandler := handler.NewMCPProtocolHandler(mcpService, collectionService, entryService, typeService, log)
 
@@ -178,6 +182,9 @@ func main() {
 
 			// AI search endpoint
 			aiSearchHandler.RegisterRoutes(r)
+
+			// Onboarding endpoint
+			onboardingHandler.RegisterRoutes(r)
 
 			// MCP management endpoint
 			mcpHandler.RegisterRoutes(r)
