@@ -23,10 +23,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go 1.23
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache-dependency-path: backend/go.sum
 
       - name: Run linter
@@ -38,6 +38,44 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: go test -race ./...
+
+  mcp-eval:
+    name: MCP Eval
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for MCP file changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^backend/internal/(handler/mcp_|service/mcp_|repository/mcp_)'; then
+            echo "mcp=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mcp=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Go
+        if: steps.changes.outputs.mcp == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+
+      - name: Run MCP eval
+        if: steps.changes.outputs.mcp == 'true'
+        working-directory: backend
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: go test -tags eval -v -run TestMCP_Eval ./internal/handler/ -timeout 5m -count=1
 
   push-image:
     name: Push Docker Image
