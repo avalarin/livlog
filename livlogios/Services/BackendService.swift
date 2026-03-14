@@ -76,7 +76,20 @@ actor BackendService {
         method: String,
         body: Data? = nil
     ) async throws -> (Data, HTTPURLResponse) {
-        return try await makeRequest(path: path, method: method, body: body, includeAuth: true)
+        do {
+            return try await makeRequest(path: path, method: method, body: body, includeAuth: true)
+        } catch AuthError.unauthorized {
+            // Try to refresh the token and retry once
+            guard let refreshToken = KeychainManager.shared.getRefreshToken() else {
+                throw AuthError.unauthorized
+            }
+
+            let authResponse = try await self.refreshToken(refreshToken)
+            KeychainManager.shared.saveAccessToken(authResponse.accessToken)
+            KeychainManager.shared.saveRefreshToken(authResponse.refreshToken)
+
+            return try await makeRequest(path: path, method: method, body: body, includeAuth: true)
+        }
     }
 
     private func makeRequest(
@@ -234,14 +247,18 @@ actor BackendService {
         let requestBody = VerifyCodeRequest(email: email, code: code)
         let bodyData = try encoder.encode(requestBody)
 
-        let (data, _) = try await makeRequest(
-            path: "/auth/email/verify",
-            method: "POST",
-            body: bodyData,
-            includeAuth: false
-        )
+        do {
+            let (data, _) = try await makeRequest(
+                path: "/auth/email/verify",
+                method: "POST",
+                body: bodyData,
+                includeAuth: false
+            )
 
-        return try decoder.decode(AuthResponse.self, from: data)
+            return try decoder.decode(AuthResponse.self, from: data)
+        } catch AuthError.unauthorized {
+            throw AuthError.invalidVerificationCode
+        }
     }
 }
 
