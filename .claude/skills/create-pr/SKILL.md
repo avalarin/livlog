@@ -22,7 +22,11 @@ gh auth login
 Run these checks before doing anything:
 
 1. **Verify `gh` is available** — run `which gh`. If missing, stop and tell the user to install it.
-2. **Check for uncommitted changes** — run `git status --porcelain`. If there are uncommitted or untracked files, stop and tell the user what's pending. Don't proceed until the working tree is clean.
+2. **Check for uncommitted changes** — run `git status --porcelain`. If there are uncommitted or untracked files, commit them automatically:
+   - Stage all modified and untracked files with `git add <specific-files>` (avoid `git add -A` to prevent accidentally staging sensitive files like `.env`)
+   - Analyze the changes and create a descriptive commit message
+   - Commit using the same format as the rest of the repo
+   - If staging/committing fails, stop and tell the user what's pending.
 3. **Get current branch** — run `git branch --show-current`. Note whether you're on `main` or a feature branch. If on `main`, you will skip merge conflict check and PR creation (Steps 5-6) but you MUST still run Steps 2-4 (push, monitor CI, handle failures).
 
 ### Step 2: Push to origin
