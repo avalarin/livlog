@@ -42,24 +42,12 @@ func (s *OnboardingService) GetTemplates(
 	return s.collectionRepo.GetTemplateCollections(ctx)
 }
 
-// CompleteOnboarding sets the display name, optionally creates a collection from a template,
-// and marks onboarding as completed.
-func (s *OnboardingService) CompleteOnboarding(
+// UpdateDisplayName validates and updates the user's display name.
+func (s *OnboardingService) UpdateDisplayName(
 	ctx context.Context,
 	userID uuid.UUID,
 	displayName string,
-	templateSlug *string,
 ) error {
-	// Check if already completed
-	user, err := s.userRepo.GetUserByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("failed to get user: %w", err)
-	}
-	if user.OnboardingCompleted {
-		return ErrOnboardingAlreadyCompleted
-	}
-
-	// Validate and set display name
 	displayName = strings.TrimSpace(displayName)
 	if len(displayName) < 1 || len(displayName) > 50 {
 		return ErrInvalidDisplayName
@@ -69,32 +57,55 @@ func (s *OnboardingService) CompleteOnboarding(
 		return fmt.Errorf("failed to update display name: %w", err)
 	}
 
-	// Create collection from template if slug provided
-	if templateSlug != nil && *templateSlug != "" {
-		template, err := s.collectionRepo.GetTemplateBySlug(ctx, *templateSlug)
-		if err != nil {
-			if errors.Is(err, repository.ErrCollectionNotFound) {
-				return ErrTemplateNotFound
-			}
-			return fmt.Errorf("failed to get template: %w", err)
-		}
+	return nil
+}
 
-		// Create a new collection with the template's properties
-		newCollection, err := s.collectionRepo.CreateCollection(
-			ctx, userID, template.Name, template.Icon, template.Color,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create collection from template: %w", err)
+// CreateCollectionFromTemplate creates a new collection from a template,
+// optionally copying the template's entries.
+func (s *OnboardingService) CreateCollectionFromTemplate(
+	ctx context.Context,
+	userID uuid.UUID,
+	templateSlug string,
+	includeEntries bool,
+) (*repository.Collection, error) {
+	template, err := s.collectionRepo.GetTemplateBySlug(ctx, templateSlug)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			return nil, ErrTemplateNotFound
 		}
+		return nil, fmt.Errorf("failed to get template: %w", err)
+	}
 
-		// Copy template entries and images
+	newCollection, err := s.collectionRepo.CreateCollection(
+		ctx, userID, template.Name, template.Icon, template.Color,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create collection from template: %w", err)
+	}
+
+	if includeEntries {
 		_, err = s.entryRepo.CopyTemplateEntries(ctx, template.ID, newCollection.ID, userID)
 		if err != nil {
-			return fmt.Errorf("failed to copy template entries: %w", err)
+			return nil, fmt.Errorf("failed to copy template entries: %w", err)
 		}
 	}
 
-	// Mark onboarding as completed
+	return newCollection, nil
+}
+
+// CompleteOnboarding marks onboarding as completed for the user.
+func (s *OnboardingService) CompleteOnboarding(
+	ctx context.Context,
+	userID uuid.UUID,
+) error {
+	user, err := s.userRepo.GetUserByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+	if user.OnboardingCompleted {
+		return ErrOnboardingAlreadyCompleted
+	}
+
 	if err := s.userRepo.CompleteOnboarding(ctx, userID); err != nil {
 		return fmt.Errorf("failed to complete onboarding: %w", err)
 	}

@@ -28,26 +28,55 @@ actor OnboardingService {
         return try decoder.decode([CollectionTemplate].self, from: data)
     }
 
-    // MARK: - Complete Onboarding
+    // MARK: - Update Display Name
 
-    func completeOnboarding(displayName: String, templateSlug: String?) async throws {
+    func updateDisplayName(_ name: String) async throws {
         struct Request: Codable {
             let displayName: String
-            let templateSlug: String?
 
             enum CodingKeys: String, CodingKey {
                 case displayName = "display_name"
-                case templateSlug = "template_slug"
             }
         }
 
-        let request = Request(displayName: displayName, templateSlug: templateSlug)
+        let request = Request(displayName: name)
         let bodyData = try encoder.encode(request)
 
         _ = try await BackendService.shared.makeAuthenticatedRequest(
-            path: "/onboarding/complete",
+            path: "/users/me/display-name",
+            method: "PUT",
+            body: bodyData
+        )
+    }
+
+    // MARK: - Create Collection from Template
+
+    func createFromTemplate(slug: String, includeEntries: Bool) async throws {
+        struct Request: Codable {
+            let includeEntries: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case includeEntries = "include_entries"
+            }
+        }
+
+        let request = Request(includeEntries: includeEntries)
+        let bodyData = try encoder.encode(request)
+
+        _ = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/from-template/\(slug)",
             method: "POST",
             body: bodyData
+        )
+    }
+
+    // MARK: - Complete Onboarding
+
+    func completeOnboarding() async throws {
+        _ = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/onboarding/complete",
+            method: "POST",
+            body: "{}".data(using: .utf8)
         )
     }
 }

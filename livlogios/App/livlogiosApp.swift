@@ -18,12 +18,11 @@ struct livlogiosApp: App { // swiftlint:disable:this type_name
                 if appState.isCheckingAuth {
                     ProgressView()
                 } else if appState.isAuthenticated {
-                    if appState.needsOnboarding {
-                        OnboardingView()
-                    } else {
-                        CollectionsView()
-                            .connectionToast(monitor: connectionMonitor)
-                    }
+                    CollectionsView()
+                        .connectionToast(monitor: connectionMonitor)
+                        .sheet(isPresented: .constant(appState.needsOnboarding)) {
+                            EditDisplayNameView(isOnboarding: true)
+                        }
                 } else {
                     LoginView()
                 }
