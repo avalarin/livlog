@@ -7,7 +7,9 @@ enum CollectionIcon: Equatable {
     static let allSystemIcons: [String] = [
         "folder", "bookmark", "movie", "music", "musical-note", "music-library",
         "music-record", "cymbals", "radio-waves", "cameras", "image", "flash-on",
-        "albums", "briefcase", "price-tag", "gift", "user", "male-user"
+        "albums", "briefcase", "price-tag", "gift", "user", "male-user",
+        "beach-umbrella", "books", "cafe", "coffee-beans", "game-controller",
+        "layers", "place-marker", "umbrella", "wine-glass"
     ]
 
     init(raw: String) {

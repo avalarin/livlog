@@ -20,6 +20,7 @@ struct CollectionsView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var showingSettings = false
+    @State private var showingTemplatePicker = false
 
     var body: some View {
         NavigationStack {
@@ -62,8 +63,13 @@ struct CollectionsView: View {
                 }
 
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingAddCollection = true
+                    Menu {
+                        Button("Create New", systemImage: "plus") {
+                            showingAddCollection = true
+                        }
+                        Button("From Template", systemImage: "square.on.square") {
+                            showingTemplatePicker = true
+                        }
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -89,6 +95,12 @@ struct CollectionsView: View {
                 ShareCollectionSheet(collection: collection) {
                     Task { await loadData() }
                 }
+            }
+            .sheet(isPresented: $showingTemplatePicker) {
+                TemplatePickerView()
+                    .onDisappear {
+                        Task { await loadData() }
+                    }
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
@@ -275,11 +287,13 @@ struct AddEditCollectionView: View {
     enum Mode: Identifiable {
         case add
         case edit(CollectionModel)
+        case addFromTemplate(CollectionTemplate)
 
         var id: String {
             switch self {
             case .add: return "add"
             case .edit(let collection): return "edit-\(collection.id)"
+            case .addFromTemplate(let template): return "template-\(template.slug)"
             }
         }
     }
@@ -298,6 +312,9 @@ struct AddEditCollectionView: View {
     @State private var errorMessage: String?
     @State private var showError = false
 
+    // Template mode state
+    @State private var includeTemplateEntries = true
+
     // Members section state (edit mode only)
     @State private var members: [CollectionMember] = []
     @State private var isLoadingMembers = false
@@ -314,6 +331,16 @@ struct AddEditCollectionView: View {
         return false
     }
 
+    private var isFromTemplate: Bool {
+        if case .addFromTemplate = mode { return true }
+        return false
+    }
+
+    private var templateData: CollectionTemplate? {
+        if case .addFromTemplate(let template) = mode { return template }
+        return nil
+    }
+
     private var editingCollection: CollectionModel? {
         if case .edit(let collection) = mode { return collection }
         return nil
@@ -324,7 +351,9 @@ struct AddEditCollectionView: View {
     }
 
     private var title: String {
-        isEditing ? "Edit Collection" : "New Collection"
+        if isEditing { return "Edit Collection" }
+        if isFromTemplate { return "From Template" }
+        return "New Collection"
     }
 
     var body: some View {
@@ -424,6 +453,12 @@ struct AddEditCollectionView: View {
                     .padding(.vertical, 8)
                 }
 
+                if isFromTemplate {
+                    Section {
+                        Toggle("Include sample entries", isOn: $includeTemplateEntries)
+                    }
+                }
+
                 Section {
                     HStack {
                         Text("Preview")
@@ -470,7 +505,8 @@ struct AddEditCollectionView: View {
                 }
             }
             .onAppear {
-                if case .edit(let collection) = mode {
+                switch mode {
+                case .edit(let collection):
                     name = collection.name
                     let parsed = CollectionIcon(raw: collection.icon)
                     selectedIcon = parsed
@@ -482,6 +518,20 @@ struct AddEditCollectionView: View {
                         iconTab = .emoji
                         emojiText = emoji
                     }
+                case .addFromTemplate(let template):
+                    name = template.name
+                    let parsed = CollectionIcon(raw: template.icon)
+                    selectedIcon = parsed
+                    selectedColor = CollectionColor(rawValue: template.color) ?? .dodgerBlue
+                    switch parsed {
+                    case .system:
+                        iconTab = .system
+                    case .emoji(let emoji):
+                        iconTab = .emoji
+                        emojiText = emoji
+                    }
+                case .add:
+                    break
                 }
             }
             .task {
@@ -622,6 +672,11 @@ struct AddEditCollectionView: View {
                 _ = try await CollectionService.shared.createCollection(name: name, icon: iconRaw, color: colorRaw)
             case .edit(let collection):
                 _ = try await CollectionService.shared.updateCollection(id: collection.id, name: name, icon: iconRaw, color: colorRaw)
+            case .addFromTemplate(let template):
+                try await OnboardingService.shared.createFromTemplate(
+                    slug: template.slug,
+                    includeEntries: includeTemplateEntries
+                )
             }
             isSaving = false
             dismiss()

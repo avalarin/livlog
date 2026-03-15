@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var showDeleteAccountAlert = false
     @State private var showHostSwitchAlert = false
     @State private var pendingHost: ServerHost?
+    @State private var showingEditName = false
 
     var body: some View {
         NavigationStack {
@@ -31,7 +32,18 @@ struct SettingsView: View {
                             LabeledContent("Email", value: email)
                         }
                         if let name = user.displayName {
-                            LabeledContent("Name", value: name)
+                            HStack {
+                                Text("Name")
+                                Spacer()
+                                Text(name)
+                                    .foregroundStyle(.secondary)
+                                Button {
+                                    showingEditName = true
+                                } label: {
+                                    Image(systemName: "pencil")
+                                }
+                                .buttonStyle(.borderless)
+                            }
                         }
                     }
                 }
@@ -174,6 +186,11 @@ struct SettingsView: View {
                 .padding(.bottom, 24)
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: toastMessage)
+            .sheet(isPresented: $showingEditName) {
+                EditDisplayNameView(
+                    currentName: appState.currentUser?.displayName ?? ""
+                )
+            }
             .alert("Switch Server", isPresented: $showHostSwitchAlert) {
                 Button("Cancel", role: .cancel) { pendingHost = nil }
                 Button("Continue", role: .destructive) {

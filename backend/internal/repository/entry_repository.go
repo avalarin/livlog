@@ -624,3 +624,54 @@ func (r *EntryRepository) CopySeedImagesToEntry(ctx context.Context, entryID uui
 
 	return tx.Commit(ctx)
 }
+
+// CopyTemplateEntries copies all entries from a template collection into a new collection,
+// assigning the given userID. It also copies any entry_images. Returns the number of entries copied.
+func (r *EntryRepository) CopyTemplateEntries(
+	ctx context.Context,
+	templateCollectionID, newCollectionID, userID uuid.UUID,
+) (int64, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Copy entries, mapping old IDs to new IDs via a CTE
+	copyQuery := `
+		WITH copied AS (
+			INSERT INTO entries (user_id, collection_id, type_id, title, description, score, date, additional_fields)
+			SELECT $3, $2, type_id, title, description, score, date, additional_fields
+			FROM entries
+			WHERE collection_id = $1
+			ORDER BY created_at ASC
+			RETURNING id
+		)
+		SELECT COUNT(*) FROM copied
+	`
+	var count int64
+	err = tx.QueryRow(ctx, copyQuery, templateCollectionID, newCollectionID, userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to copy template entries: %w", err)
+	}
+
+	// Copy entry images: match by title since IDs are new
+	imageQuery := `
+		INSERT INTO entry_images (entry_id, image_data, is_cover, position, hash)
+		SELECT new_e.id, ei.image_data, ei.is_cover, ei.position, ei.hash
+		FROM entries old_e
+		JOIN entry_images ei ON ei.entry_id = old_e.id
+		JOIN entries new_e ON new_e.title = old_e.title AND new_e.collection_id = $2
+		WHERE old_e.collection_id = $1
+	`
+	_, err = tx.Exec(ctx, imageQuery, templateCollectionID, newCollectionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to copy template entry images: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return count, nil
+}

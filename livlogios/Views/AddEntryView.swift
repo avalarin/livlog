@@ -76,42 +76,38 @@ struct AddEntryView: View {
                     }
                 }
 
-                if focus == nil {
-                    ToolbarItemGroup(placement: .bottomBar) {
-                        Button(action: { showAISearchSheet = true }) {
-                            Image(systemName: "sparkles")
-                        }
-
-                        PhotosPicker(
-                            selection: $selectedPhotos,
-                            maxSelectionCount: 3 - selectedImages.count,
-                            matching: .images
-                        ) {
-                            Image(systemName: "photo")
-                        }
-
-                        Spacer()
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button(action: { showAISearchSheet = true }) {
+                        Image(systemName: "sparkles")
                     }
+
+                    PhotosPicker(
+                        selection: $selectedPhotos,
+                        maxSelectionCount: 3 - selectedImages.count,
+                        matching: .images
+                    ) {
+                        Image(systemName: "photo")
+                    }
+
+                    Spacer()
                 }
 
-                if focus != nil {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Button(action: { showAISearchSheet = true }) {
-                            Image(systemName: "sparkles")
-                        }
-
-                        PhotosPicker(
-                            selection: $selectedPhotos,
-                            maxSelectionCount: 3 - selectedImages.count,
-                            matching: .images
-                        ) {
-                            Image(systemName: "photo")
-                        }
-
-                        Spacer()
-
-                        Button("Done") { focus = nil }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Button(action: { showAISearchSheet = true }) {
+                        Image(systemName: "sparkles")
                     }
+
+                    PhotosPicker(
+                        selection: $selectedPhotos,
+                        maxSelectionCount: 3 - selectedImages.count,
+                        matching: .images
+                    ) {
+                        Image(systemName: "photo")
+                    }
+
+                    Spacer()
+
+                    Button("Done") { focus = nil }
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {

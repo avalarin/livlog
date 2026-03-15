@@ -20,6 +20,9 @@ struct livlogiosApp: App { // swiftlint:disable:this type_name
                 } else if appState.isAuthenticated {
                     CollectionsView()
                         .connectionToast(monitor: connectionMonitor)
+                        .sheet(isPresented: .constant(appState.needsOnboarding)) {
+                            EditDisplayNameView(isOnboarding: true)
+                        }
                 } else {
                     LoginView()
                 }
