@@ -15,6 +15,8 @@ struct AddEntryView: View {
 
     let collection: CollectionModel
 
+    var onEntryCreated: ((EntryModel) -> Void)?
+
     /// Entry ID to edit (nil for new entry)
     var editingEntryID: String?
 
@@ -22,10 +24,11 @@ struct AddEntryView: View {
 
     @State private var types: [EntryTypeModel]
 
-    init(collection: CollectionModel, editingEntryID: String? = nil, initialTypes: [EntryTypeModel] = []) {
+    init(collection: CollectionModel, editingEntryID: String? = nil, initialTypes: [EntryTypeModel] = [], onEntryCreated: ((EntryModel) -> Void)? = nil) {
         self.collection = collection
         self.editingEntryID = editingEntryID
         self._types = State(initialValue: initialTypes)
+        self.onEntryCreated = onEntryCreated
     }
     @State private var selectedType: EntryTypeModel?
     @State private var additionalFieldValues: [String: String] = [:]
@@ -436,7 +439,7 @@ struct AddEntryView: View {
                     imageData: imageData.isEmpty ? nil : imageData
                 )
             } else {
-                _ = try await EntryService.shared.createEntry(
+                let newEntry = try await EntryService.shared.createEntry(
                     collectionID: collection.id,
                     typeID: selectedType?.id,
                     title: title,
@@ -446,6 +449,7 @@ struct AddEntryView: View {
                     additionalFields: additionalFieldValues,
                     imageData: imageData
                 )
+                onEntryCreated?(newEntry)
             }
 
             isSaving = false

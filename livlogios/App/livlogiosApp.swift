@@ -23,10 +23,13 @@ struct livlogiosApp: App { // swiftlint:disable:this type_name
                         .sheet(isPresented: .constant(appState.needsOnboarding)) {
                             EditDisplayNameView(isOnboarding: true)
                         }
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
                 } else {
                     LoginView()
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.35), value: appState.isAuthenticated)
             .environmentObject(appState)
             .onAppear {
                 if appState.isAuthenticated {

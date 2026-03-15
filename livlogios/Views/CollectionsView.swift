@@ -25,22 +25,50 @@ struct CollectionsView: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(collections) { collection in
-                    NavigationLink {
-                        ContentView(collection: collection)
-                    } label: {
-                        CollectionRow(
-                            collection: collection,
-                            entryCount: collection.entryCount,
-                            onEdit: { editingCollection = collection },
-                            onShare: { sharingCollection = collection },
-                            onDelete: {
-                                collectionToDelete = collection
-                                showingDeleteAlert = true
+                if collections.isEmpty && !isLoading {
+                    ContentUnavailableView {
+                        Label("No Collections", systemImage: "folder")
+                    } description: {
+                        Text("Create a collection to organize your entries")
+                    } actions: {
+                        Button {
+                            Task {
+                                await createDefaultCollections()
                             }
-                        )
+                        } label: {
+                            if isCreatingDefaults {
+                                ProgressView()
+                                    .frame(height: 20)
+                            } else {
+                                Text("Create Collection")
+                            }
+                        }
+                        .disabled(isCreatingDefaults)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                     }
-                    .buttonStyle(.plain)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 60)
+                } else {
+                    ForEach(collections) { collection in
+                        NavigationLink {
+                            ContentView(collection: collection)
+                        } label: {
+                            CollectionRow(
+                                collection: collection,
+                                entryCount: collection.entryCount,
+                                onEdit: { editingCollection = collection },
+                                onShare: { sharingCollection = collection },
+                                onDelete: {
+                                    collectionToDelete = collection
+                                    showingDeleteAlert = true
+                                }
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             .refreshable {
@@ -76,12 +104,15 @@ struct CollectionsView: View {
                 }
             }
             .sheet(isPresented: $showingAddCollection) {
-                AddEditCollectionView(mode: .add)
-                    .onDisappear {
-                        Task {
-                            await loadData()
-                        }
+                AddEditCollectionView(mode: .add, onCollectionSaved: { newCollection in
+                    withAnimation(.spring(response: 0.35)) {
+                        collections.insert(newCollection, at: 0)
                     }
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(500))
+                        await loadData()
+                    }
+                })
             }
             .sheet(item: $editingCollection) { collection in
                 AddEditCollectionView(mode: .edit(collection))
@@ -126,29 +157,6 @@ struct CollectionsView: View {
                     }
                 }
             }
-            .overlay {
-                if collections.isEmpty && !isLoading {
-                    ContentUnavailableView {
-                        Label("No Collections", systemImage: "folder")
-                    } description: {
-                        Text("Create a collection to organize your entries")
-                    } actions: {
-                        Button {
-                            Task {
-                                await createDefaultCollections()
-                            }
-                        } label: {
-                            if isCreatingDefaults {
-                                ProgressView()
-                            } else {
-                                Text("Create My List")
-                            }
-                        }
-                        .disabled(isCreatingDefaults)
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            }
             .task {
                 await loadData()
             }
@@ -168,7 +176,10 @@ struct CollectionsView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            collections = try await CollectionService.shared.getCollections()
+            let newCollections = try await CollectionService.shared.getCollections()
+            withAnimation(.easeInOut(duration: 0.3)) {
+                collections = newCollections
+            }
        } catch is CancellationError {
            return
        } catch let urlError as URLError where urlError.code == .cancelled {
@@ -299,6 +310,8 @@ struct AddEditCollectionView: View {
     }
 
     let mode: Mode
+
+    var onCollectionSaved: ((CollectionModel) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
@@ -669,7 +682,8 @@ struct AddEditCollectionView: View {
             let colorRaw = selectedColor.rawValue
             switch mode {
             case .add:
-                _ = try await CollectionService.shared.createCollection(name: name, icon: iconRaw, color: colorRaw)
+                let newCollection = try await CollectionService.shared.createCollection(name: name, icon: iconRaw, color: colorRaw)
+                onCollectionSaved?(newCollection)
             case .edit(let collection):
                 _ = try await CollectionService.shared.updateCollection(id: collection.id, name: name, icon: iconRaw, color: colorRaw)
             case .addFromTemplate(let template):

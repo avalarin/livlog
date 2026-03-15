@@ -17,6 +17,7 @@ struct EmailVerificationView: View {
     @State private var code: [String] = Array(repeating: "", count: 6)
     @FocusState private var focusedField: Int?
     @State private var isLoading = false
+    @State private var isSuccess = false
     @State private var errorMessage: String?
     @State private var resendTimer: Int = 0
     @State private var timerActive = false
@@ -59,19 +60,25 @@ struct EmailVerificationView: View {
             Button {
                 handleVerify()
             } label: {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                } else {
-                    Text("Sign In")
+                Group {
+                    if isSuccess {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.semibold)
+                            .contentTransition(.symbolEffect(.replace))
+                    } else if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    } else {
+                        Text("Sign In")
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(isCodeComplete ? Color.blue : Color.gray)
+            .background(isSuccess ? Color.green : (isCodeComplete ? Color.blue : Color.gray))
             .foregroundColor(.white)
             .cornerRadius(8)
-            .disabled(!isCodeComplete || isLoading)
+            .disabled(!isCodeComplete || isLoading || isSuccess)
             .padding(.horizontal, 40)
 
             // Resend button
@@ -148,13 +155,21 @@ struct EmailVerificationView: View {
         let fullCode = code.joined()
 
         Task {
+            defer { isLoading = false }
             do {
                 _ = try await appState.authService.signInWithEmail(
                     email: email,
                     code: fullCode
                 )
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isSuccess = true
+                }
+                try await Task.sleep(for: .milliseconds(550))
                 appState.isAuthenticated = true
                 appState.currentUser = appState.authService.currentUser
+            } catch is CancellationError {
+                // Task was cancelled (e.g. user navigated back), don't transition
+                return
             } catch {
                 if let authError = error as? AuthError {
                     errorMessage = authError.errorDescription
@@ -166,7 +181,6 @@ struct EmailVerificationView: View {
                 code = Array(repeating: "", count: 6)
                 focusedField = 0
             }
-            isLoading = false
         }
     }
 
