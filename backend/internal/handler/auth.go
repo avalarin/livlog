@@ -50,7 +50,8 @@ func (h *AuthHandler) AppleAuth(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidToken) ||
 			errors.Is(err, service.ErrInvalidIssuer) ||
-			errors.Is(err, service.ErrInvalidAudience) {
+			errors.Is(err, service.ErrInvalidAudience) ||
+			errors.Is(err, service.ErrTokenExpired) {
 			respondWithError(h.log, w, http.StatusUnauthorized, "Invalid Apple token", err)
 			return
 		}

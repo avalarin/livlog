@@ -184,7 +184,12 @@ struct LoginView: View {
                 }
             } catch {
                 if let authError = error as? AuthError {
-                    errorMessage = authError.errorDescription
+                    switch authError {
+                    case .unauthorized:
+                        errorMessage = "Failed to sign in with Apple. Please try again."
+                    default:
+                        errorMessage = authError.errorDescription
+                    }
                 } else {
                     errorMessage = "Failed to sign in: \(error.localizedDescription)"
                 }

@@ -72,7 +72,7 @@ func (s *AuthService) AuthenticateWithApple(ctx context.Context, req *AppleAuthR
 
 	appleUserID := claims.Sub
 	email := claims.Email
-	emailVerified := claims.EmailVerified
+	emailVerified := bool(claims.EmailVerified)
 
 	// Try to find existing user
 	user, err := s.userRepo.FindUserByProvider(ctx, "apple", appleUserID)
