@@ -232,29 +232,44 @@ func generateVerificationCode() (string, error) {
 
 // Helper functions
 
-// findOrCreateEmailUser finds existing user by email or creates new one
+// findOrCreateEmailUser finds existing user by email or creates new one.
+// If the user exists (e.g. registered via Apple Sign In) but has no email provider,
+// links the email provider to the existing account.
 func (s *EmailAuthService) findOrCreateEmailUser(ctx context.Context, email string) (*repository.User, error) {
 	// Try to find user by email provider
 	user, err := s.userRepo.FindUserByProvider(ctx, "email", email)
-	if err != nil {
-		if errors.Is(err, repository.ErrUserNotFound) {
-			// Create new user with email provider
-			user, err = s.userRepo.CreateUserWithProvider(
-				ctx,
-				email,
-				"",      // No display name initially
-				true,    // Email verified after successful code verification
-				"email", // Provider type
-				email,   // Provider user ID is the email itself
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create user: %w", err)
-			}
-			return user, nil
-		}
+	if err == nil {
+		return user, nil
+	}
+	if !errors.Is(err, repository.ErrUserNotFound) {
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
+	// No email provider — check if user exists with this email (e.g. via Apple)
+	user, err = s.userRepo.GetUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
+		return nil, fmt.Errorf("failed to find user by email: %w", err)
+	}
+	if user != nil {
+		// Link email provider to existing account
+		if err := s.userRepo.CreateAuthProvider(ctx, user.ID, "email", email); err != nil {
+			return nil, fmt.Errorf("failed to link email provider: %w", err)
+		}
+		return user, nil
+	}
+
+	// Completely new user — create with email provider
+	user, err = s.userRepo.CreateUserWithProvider(
+		ctx,
+		email,
+		"",      // No display name initially
+		true,    // Email verified after successful code verification
+		"email", // Provider type
+		email,   // Provider user ID is the email itself
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
 	return user, nil
 }
 

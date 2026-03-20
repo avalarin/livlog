@@ -15,10 +15,19 @@ import (
 // --- Mock implementations ---
 
 type mockUserRepo struct {
+	getUserByEmailFn         func(ctx context.Context, email string) (*repository.User, error)
 	findUserByProviderFn     func(ctx context.Context, provider, providerUserID string) (*repository.User, error)
 	createUserWithProviderFn func(ctx context.Context, email, displayName string, emailVerified bool, provider, providerUserID string) (*repository.User, error)
+	createAuthProviderFn     func(ctx context.Context, userID uuid.UUID, provider, providerUserID string) error
 	saveRefreshTokenFn       func(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) error
 	getUserAuthProvidersFn   func(ctx context.Context, userID uuid.UUID) ([]string, error)
+}
+
+func (m *mockUserRepo) GetUserByEmail(ctx context.Context, email string) (*repository.User, error) {
+	if m.getUserByEmailFn != nil {
+		return m.getUserByEmailFn(ctx, email)
+	}
+	return nil, repository.ErrUserNotFound
 }
 
 func (m *mockUserRepo) FindUserByProvider(ctx context.Context, provider, providerUserID string) (*repository.User, error) {
@@ -27,6 +36,13 @@ func (m *mockUserRepo) FindUserByProvider(ctx context.Context, provider, provide
 
 func (m *mockUserRepo) CreateUserWithProvider(ctx context.Context, email, displayName string, emailVerified bool, provider, providerUserID string) (*repository.User, error) {
 	return m.createUserWithProviderFn(ctx, email, displayName, emailVerified, provider, providerUserID)
+}
+
+func (m *mockUserRepo) CreateAuthProvider(ctx context.Context, userID uuid.UUID, provider, providerUserID string) error {
+	if m.createAuthProviderFn != nil {
+		return m.createAuthProviderFn(ctx, userID, provider, providerUserID)
+	}
+	return nil
 }
 
 func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) error {

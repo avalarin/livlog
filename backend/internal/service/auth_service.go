@@ -74,14 +74,13 @@ func (s *AuthService) AuthenticateWithApple(ctx context.Context, req *AppleAuthR
 	email := claims.Email
 	emailVerified := bool(claims.EmailVerified)
 
-	// Try to find existing user
+	// Try to find existing user by Apple provider
 	user, err := s.userRepo.FindUserByProvider(ctx, "apple", appleUserID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			// Register new user
-			user, err = s.registerNewAppleUser(ctx, req, appleUserID, email, emailVerified)
+			user, err = s.findOrCreateAppleUser(ctx, req, appleUserID, email, emailVerified)
 			if err != nil {
-				return nil, fmt.Errorf("failed to register user: %w", err)
+				return nil, err
 			}
 		} else {
 			return nil, fmt.Errorf("failed to find user: %w", err)
@@ -221,6 +220,40 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID string) error {
 }
 
 // Helper functions
+
+func (s *AuthService) findOrCreateAppleUser(
+	ctx context.Context,
+	req *AppleAuthRequest,
+	appleUserID, email string,
+	emailVerified bool,
+) (*repository.User, error) {
+	// Check if a user with this email already exists (e.g. registered via email auth)
+	if email != "" {
+		user, err := s.userRepo.GetUserByEmail(ctx, email)
+		if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
+			return nil, fmt.Errorf("failed to find user by email: %w", err)
+		}
+		if user != nil {
+			// Link Apple provider to existing account
+			if err := s.userRepo.CreateAuthProvider(ctx, user.ID, "apple", appleUserID); err != nil {
+				return nil, fmt.Errorf("failed to link Apple provider: %w", err)
+			}
+			// Update display name if empty and Apple provided one
+			if (user.DisplayName == nil || *user.DisplayName == "") && req.FullName != nil {
+				displayName := buildDisplayName(req.FullName)
+				if displayName != "" {
+					if err := s.userRepo.UpdateDisplayName(ctx, user.ID, displayName); err != nil {
+						return nil, fmt.Errorf("failed to update display name: %w", err)
+					}
+				}
+			}
+			return user, nil
+		}
+	}
+
+	// Completely new user — register
+	return s.registerNewAppleUser(ctx, req, appleUserID, email, emailVerified)
+}
 
 func (s *AuthService) registerNewAppleUser(
 	ctx context.Context,

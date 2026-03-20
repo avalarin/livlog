@@ -132,7 +132,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("jwt.refresh_token_lifetime", 2592000)
 	v.SetDefault("jwt.issuer", "livlog-api")
 	v.SetDefault("jwt.audience", "livlog-app")
-	v.SetDefault("apple.bundle_id", "net.avalarin.livlog")
+	v.SetDefault("apple.bundle_id", "net.avalarin.groveapp")
 	v.SetDefault("openrouter.base_url", "https://openrouter.ai/api/v1/chat/completions")
 	v.SetDefault("openrouter.model", "perplexity/sonar")
 	v.SetDefault("ratelimit.ai_search_basic_limit", 5)
