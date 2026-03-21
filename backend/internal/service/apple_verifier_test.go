@@ -55,7 +55,7 @@ func TestAppleBool_UnmarshalJSON_InvalidNumber(t *testing.T) {
 
 func TestAppleBool_UnmarshalJSON_InvalidString(t *testing.T) {
 	var b appleBool
-	// Unrecognised string value (not "true") — treated as false, no error
+	// Unrecognized string value (not "true") — treated as false, no error
 	if err := json.Unmarshal([]byte(`"abc"`), &b); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
