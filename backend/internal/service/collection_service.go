@@ -309,8 +309,17 @@ type CollectionStatItem struct {
 	DisplayValue string
 }
 
-// GetCollectionStatistics returns formatted statistics for a collection.
-// It reads from the cache table and refreshes it on a cache miss.
+// AvailableStatItem describes a statistic that can be enabled or disabled for a collection.
+type AvailableStatItem struct {
+	ID          string
+	Title       string
+	Description string
+	IsEnabled   bool
+	Position    int // -1 if not enabled
+}
+
+// GetCollectionStatistics returns formatted statistics for a collection in config order.
+// It reads from the cache table and refreshes on a cache miss.
 // Returns ErrCollectionNotFound if the user has no access to the collection.
 func (s *CollectionService) GetCollectionStatistics(
 	ctx context.Context,
@@ -325,40 +334,167 @@ func (s *CollectionService) GetCollectionStatistics(
 		return nil, fmt.Errorf("failed to get user role: %w", err)
 	}
 
-	stats, err := s.collectionRepo.GetCollectionStatistics(ctx, collectionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get collection statistics: %w", err)
+	// Ensure default stat configs exist (idempotent).
+	if err := s.collectionRepo.EnsureDefaultStatConfigs(ctx, collectionID); err != nil {
+		return nil, fmt.Errorf("failed to ensure default stat configs: %w", err)
 	}
 
-	// Cache miss — compute and store, then re-read.
-	if stats == nil {
-		if err := s.collectionRepo.RefreshCollectionStatistics(ctx, collectionID); err != nil {
+	// Load ordered configs.
+	configs, err := s.collectionRepo.GetCollectionStatConfigs(ctx, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stat configs: %w", err)
+	}
+
+	// Load all definitions for title lookup.
+	allDefs, err := s.collectionRepo.GetStatisticDefinitions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stat definitions: %w", err)
+	}
+	defsByID := make(map[string]repository.StatisticDefinition, len(allDefs))
+	for _, d := range allDefs {
+		defsByID[d.ID] = d
+	}
+
+	// Load cached values.
+	cachedValues, err := s.collectionRepo.GetCollectionStatValues(ctx, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stat values: %w", err)
+	}
+
+	// On cache miss, refresh and re-read.
+	if len(cachedValues) == 0 {
+		if err := s.collectionRepo.RefreshCollectionStatValues(ctx, collectionID); err != nil {
 			return nil, fmt.Errorf("failed to refresh collection statistics: %w", err)
 		}
-		stats, err = s.collectionRepo.GetCollectionStatistics(ctx, collectionID)
+		cachedValues, err = s.collectionRepo.GetCollectionStatValues(ctx, collectionID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get collection statistics after refresh: %w", err)
+			return nil, fmt.Errorf("failed to get stat values after refresh: %w", err)
 		}
 	}
 
-	// Format last entry date.
-	lastEntryDisplay := "—"
-	if stats != nil && stats.LastEntryDate != nil {
-		lastEntryDisplay = stats.LastEntryDate.Format("Jan 2, 2006")
+	valuesByID := make(map[string]string, len(cachedValues))
+	for _, v := range cachedValues {
+		valuesByID[v.StatisticID] = v.DisplayValue
 	}
 
-	totalEntries := 0
-	backlogEntries := 0
-	if stats != nil {
-		totalEntries = stats.TotalEntries
-		backlogEntries = stats.BacklogEntries
+	// Build result in config order.
+	items := make([]CollectionStatItem, 0, len(configs))
+	for _, cfg := range configs {
+		def, ok := defsByID[cfg.StatisticID]
+		if !ok {
+			continue
+		}
+		displayValue, ok := valuesByID[cfg.StatisticID]
+		if !ok {
+			displayValue = "—"
+		}
+		items = append(items, CollectionStatItem{
+			Title:        def.Title,
+			DisplayValue: displayValue,
+		})
 	}
 
-	return []CollectionStatItem{
-		{Title: "Total", DisplayValue: fmt.Sprintf("%d", totalEntries)},
-		{Title: "Backlog", DisplayValue: fmt.Sprintf("%d", backlogEntries)},
-		{Title: "Last Entry", DisplayValue: lastEntryDisplay},
-	}, nil
+	return items, nil
+}
+
+// GetAvailableStatistics returns all stats relevant for a collection, marking which are enabled.
+func (s *CollectionService) GetAvailableStatistics(
+	ctx context.Context,
+	collectionID, userID uuid.UUID,
+) ([]AvailableStatItem, error) {
+	// Verify access.
+	_, err := s.collectionRepo.GetUserRole(ctx, collectionID, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			return nil, repository.ErrCollectionNotFound
+		}
+		return nil, fmt.Errorf("failed to get user role: %w", err)
+	}
+
+	// Get all relevant definitions for this collection.
+	availDefs, err := s.collectionRepo.GetAvailableStatsForCollection(ctx, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get available stats: %w", err)
+	}
+
+	// Get current configs (which are enabled and in what order).
+	configs, err := s.collectionRepo.GetCollectionStatConfigs(ctx, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stat configs: %w", err)
+	}
+	enabledByID := make(map[string]int, len(configs))
+	for _, c := range configs {
+		enabledByID[c.StatisticID] = c.Position
+	}
+
+	items := make([]AvailableStatItem, 0, len(availDefs))
+	for _, d := range availDefs {
+		pos, enabled := enabledByID[d.ID]
+		if !enabled {
+			pos = -1
+		}
+		items = append(items, AvailableStatItem{
+			ID:          d.ID,
+			Title:       d.Title,
+			Description: d.Description,
+			IsEnabled:   enabled,
+			Position:    pos,
+		})
+	}
+
+	return items, nil
+}
+
+// UpdateStatisticsConfig replaces the collection's stat config with the provided ordered list.
+// Only owners and writers may update. All provided stat IDs must be valid.
+func (s *CollectionService) UpdateStatisticsConfig(
+	ctx context.Context,
+	collectionID, userID uuid.UUID,
+	statIDs []string,
+) error {
+	// Verify write access.
+	role, err := s.collectionRepo.GetUserRole(ctx, collectionID, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			return repository.ErrCollectionNotFound
+		}
+		return fmt.Errorf("failed to get user role: %w", err)
+	}
+	if role == "read" {
+		return ErrNotCollectionOwner
+	}
+
+	// Validate all stat IDs exist.
+	allDefs, err := s.collectionRepo.GetStatisticDefinitions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get stat definitions: %w", err)
+	}
+	validIDs := make(map[string]struct{}, len(allDefs))
+	for _, d := range allDefs {
+		validIDs[d.ID] = struct{}{}
+	}
+	for _, id := range statIDs {
+		if _, ok := validIDs[id]; !ok {
+			return fmt.Errorf("unknown statistic id: %q", id)
+		}
+	}
+
+	// Build ordered configs.
+	configs := make([]repository.CollectionStatConfig, len(statIDs))
+	for i, id := range statIDs {
+		configs[i] = repository.CollectionStatConfig{StatisticID: id, Position: i}
+	}
+
+	if err := s.collectionRepo.SetCollectionStatConfigs(ctx, collectionID, configs); err != nil {
+		return fmt.Errorf("failed to set stat configs: %w", err)
+	}
+
+	// Recompute cached values for the new config.
+	if err := s.collectionRepo.RefreshCollectionStatValues(ctx, collectionID); err != nil {
+		return fmt.Errorf("failed to refresh stat values: %w", err)
+	}
+
+	return nil
 }
 
 // CreateDefaultCollections creates default collections if user has none

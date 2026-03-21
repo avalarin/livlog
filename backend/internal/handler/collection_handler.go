@@ -35,6 +35,8 @@ func (h *CollectionHandler) RegisterRoutes(r chi.Router) {
 	r.Delete("/collections/{id}", h.DeleteCollection)
 	r.Get("/collections/{id}/members", h.GetMembers)
 	r.Get("/collections/{id}/statistics", h.GetCollectionStatistics)
+	r.Get("/collections/{id}/statistics/available", h.GetAvailableStatistics)
+	r.Put("/collections/{id}/statistics/config", h.UpdateStatisticsConfig)
 	r.Post("/collections/{id}/shares", h.AddShare)
 	r.Patch("/collections/{id}/shares/{userID}", h.UpdateShare)
 	r.Delete("/collections/{id}/shares/{userID}", h.RemoveShare)
@@ -550,6 +552,105 @@ func (h *CollectionHandler) GetCollectionStatistics(w http.ResponseWriter, r *ht
 	}
 
 	respondWithJSON(h.log, w, http.StatusOK, response)
+}
+
+type availableStatResponse struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	IsEnabled   bool   `json:"is_enabled"`
+	Position    int    `json:"position"`
+}
+
+type updateStatsConfigRequest struct {
+	StatisticIDs []string `json:"statistic_ids"`
+}
+
+func (h *CollectionHandler) GetAvailableStatistics(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
+		return
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
+		return
+	}
+
+	collectionID := chi.URLParam(r, "id")
+	cid, err := uuid.Parse(collectionID)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
+		return
+	}
+
+	items, err := h.collectionService.GetAvailableStatistics(r.Context(), cid, uid)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
+			return
+		}
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get available statistics", err)
+		return
+	}
+
+	response := make([]availableStatResponse, len(items))
+	for i, item := range items {
+		response[i] = availableStatResponse{
+			ID:          item.ID,
+			Title:       item.Title,
+			Description: item.Description,
+			IsEnabled:   item.IsEnabled,
+			Position:    item.Position,
+		}
+	}
+
+	respondWithJSON(h.log, w, http.StatusOK, response)
+}
+
+func (h *CollectionHandler) UpdateStatisticsConfig(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
+		return
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
+		return
+	}
+
+	collectionID := chi.URLParam(r, "id")
+	cid, err := uuid.Parse(collectionID)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
+		return
+	}
+
+	var req updateStatsConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	err = h.collectionService.UpdateStatisticsConfig(r.Context(), cid, uid, req.StatisticIDs)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
+			return
+		}
+		if errors.Is(err, service.ErrNotCollectionOwner) {
+			respondWithError(h.log, w, http.StatusForbidden, err.Error(), err)
+			return
+		}
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to update statistics config", err)
+		return
+	}
+
+	respondWithJSON(h.log, w, http.StatusOK, map[string]string{"message": "Statistics config updated"})
 }
 
 func mapCollectionToResponse(c *repository.Collection) collectionResponse {

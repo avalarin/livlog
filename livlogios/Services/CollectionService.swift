@@ -175,6 +175,31 @@ actor CollectionService {
         return try decoder.decode([CollectionStatistic].self, from: data)
     }
 
+    // MARK: - Get Available Statistics
+
+    func getAvailableStatistics(collectionID: String) async throws -> [AvailableStatistic] {
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(collectionID)/statistics/available",
+            method: "GET"
+        )
+        return try decoder.decode([AvailableStatistic].self, from: data)
+    }
+
+    // MARK: - Update Statistics Config
+
+    func updateStatisticsConfig(collectionID: String, statisticIDs: [String]) async throws {
+        struct Request: Codable {
+            let statistic_ids: [String]
+        }
+        let request = Request(statistic_ids: statisticIDs)
+        let bodyData = try encoder.encode(request)
+        _ = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(collectionID)/statistics/config",
+            method: "PUT",
+            body: bodyData
+        )
+    }
+
     // MARK: - Remove Share
 
     func removeShare(collectionID: String, userID: String) async throws {

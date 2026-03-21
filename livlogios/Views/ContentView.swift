@@ -31,6 +31,7 @@ struct ContentView: View {
     }
 
     @State private var showingAddEntry = false
+    @State private var showingCustomizeStats = false
     @State private var showingSearch = false
     @State private var showingDebugMenu = false
     @State private var isSelectMode = false
@@ -178,6 +179,12 @@ struct ContentView: View {
                     }
 
                     Button {
+                        showingCustomizeStats = true
+                    } label: {
+                        Label("Customize Statistics", systemImage: "slider.horizontal.3")
+                    }
+
+                    Button {
                         isSelectMode = true
                     } label: {
                         Label("Select", systemImage: "checkmark.circle")
@@ -295,35 +302,52 @@ struct ContentView: View {
     @ViewBuilder
     private var statisticsContent: some View {
         if showStatistics && !statistics.isEmpty {
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
-                ForEach(statistics) { stat in
-                    Button { } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(stat.title)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(stat.displayValue)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .contentShape(Rectangle())
+            if statistics.count <= 3 {
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 12) {
+                    ForEach(statistics) { stat in
+                        statisticCard(stat)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 12)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(statistics) { stat in
+                            statisticCard(stat)
+                                .frame(width: (UIScreen.main.bounds.width - 48) / 3.3)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.bottom, 12)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 12)
         }
+    }
+
+    private func statisticCard(_ stat: CollectionStatistic) -> some View {
+        Button { } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(stat.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(stat.displayValue)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -416,6 +440,11 @@ struct ContentView: View {
         .toolbar { toolbarContent }
         .sheet(isPresented: $showingAddEntry) {
             AddEntryView(collection: collection, onEntryCreated: handleEntryCreated)
+        }
+        .sheet(isPresented: $showingCustomizeStats) {
+            CustomizeStatisticsView(collectionID: collection.id) {
+                Task { await loadData() }
+            }
         }
         .fullScreenCover(isPresented: $showingSearch) {
             SearchView(types: types)

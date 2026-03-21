@@ -153,7 +153,7 @@ func (s *EntryService) CreateEntry(
 
 	// Refresh collection statistics cache (best-effort).
 	if collectionID != nil {
-		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *collectionID)
+		_ = s.collectionRepo.RefreshCollectionStatValues(ctx, *collectionID)
 	}
 
 	return entry, nil
@@ -302,10 +302,10 @@ func (s *EntryService) UpdateEntry(
 
 	// Refresh collection statistics cache for affected collections (best-effort).
 	if existing.CollectionID != nil {
-		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *existing.CollectionID)
+		_ = s.collectionRepo.RefreshCollectionStatValues(ctx, *existing.CollectionID)
 	}
 	if collectionID != nil && (existing.CollectionID == nil || *collectionID != *existing.CollectionID) {
-		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *collectionID)
+		_ = s.collectionRepo.RefreshCollectionStatValues(ctx, *collectionID)
 	}
 
 	return entry, nil
@@ -342,7 +342,7 @@ func (s *EntryService) DeleteEntry(
 
 	// Refresh collection statistics cache (best-effort).
 	if entry.CollectionID != nil {
-		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *entry.CollectionID)
+		_ = s.collectionRepo.RefreshCollectionStatValues(ctx, *entry.CollectionID)
 	}
 
 	return nil

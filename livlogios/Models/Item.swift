@@ -142,6 +142,30 @@ struct CollectionStatistic: Codable, Identifiable {
     }
 }
 
+// MARK: - Available Statistic
+
+struct AvailableStatistic: Codable, Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let isEnabled: Bool
+    let position: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+        case isEnabled = "is_enabled"
+        case position
+    }
+
+    init(id: String, title: String, description: String, isEnabled: Bool, position: Int) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.isEnabled = isEnabled
+        self.position = position
+    }
+}
+
 // MARK: - Field Definition
 
 struct FieldDefinition: Codable, Equatable {
@@ -489,6 +513,16 @@ extension CollectionStatistic {
         CollectionStatistic(title: "Total", displayValue: "6"),
         CollectionStatistic(title: "Backlog", displayValue: "0"),
         CollectionStatistic(title: "Last Entry", displayValue: "Mar 21, 2026")
+    ]
+}
+
+extension AvailableStatistic {
+    static let previewItems: [AvailableStatistic] = [
+        AvailableStatistic(id: "total_entries", title: "Total", description: "Total number of entries", isEnabled: true, position: 0),
+        AvailableStatistic(id: "backlog", title: "Backlog", description: "Entries not yet rated", isEnabled: true, position: 1),
+        AvailableStatistic(id: "last_entry", title: "Last Entry", description: "Date of the most recent entry", isEnabled: true, position: 2),
+        AvailableStatistic(id: "top_genre", title: "Top Genre", description: "Most frequent genre", isEnabled: false, position: -1),
+        AvailableStatistic(id: "avg_score", title: "Avg Score", description: "Average rating", isEnabled: false, position: -1),
     ]
 }
 #endif

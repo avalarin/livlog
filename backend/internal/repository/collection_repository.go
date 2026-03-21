@@ -541,68 +541,477 @@ func (r *CollectionRepository) GetTemplateBySlug(
 	return &c, nil
 }
 
-// CollectionStatistics holds cached aggregate stats for a collection.
-type CollectionStatistics struct {
-	CollectionID   uuid.UUID
-	TotalEntries   int
-	BacklogEntries int
-	LastEntryDate  *time.Time
-	UpdatedAt      time.Time
+// StatisticDefinition describes a statistic that can be shown for a collection.
+type StatisticDefinition struct {
+	ID          string
+	Title       string
+	Description string
+	StatType    string  // "builtin" or "field_aggregation"
+	FieldKey    *string // for field_aggregation: which additional_field key
+	Aggregation *string // "count_top", "min", "max", "avg", "count_distinct"
+	IsDefault   bool
 }
 
-// GetCollectionStatistics reads cached statistics for a collection.
-// Returns nil (not an error) when no cached row exists yet.
-func (r *CollectionRepository) GetCollectionStatistics(
+// CollectionStatConfig holds configuration for a single stat slot in a collection.
+type CollectionStatConfig struct {
+	StatisticID string
+	Position    int
+}
+
+// CollectionStatValue holds a cached computed value for a stat.
+type CollectionStatValue struct {
+	StatisticID  string
+	DisplayValue string
+}
+
+// GetStatisticDefinitions returns all available statistic definitions ordered by id.
+func (r *CollectionRepository) GetStatisticDefinitions(
 	ctx context.Context,
-	collectionID uuid.UUID,
-) (*CollectionStatistics, error) {
+) ([]StatisticDefinition, error) {
 	query := `
-		SELECT collection_id, total_entries, backlog_entries, last_entry_date, updated_at
-		FROM collection_statistics
-		WHERE collection_id = $1
+		SELECT id, title, description, stat_type, field_key, aggregation, is_default
+		FROM statistic_definitions
+		ORDER BY id
 	`
 
-	var s CollectionStatistics
-	err := r.db.QueryRow(ctx, query, collectionID).Scan(
-		&s.CollectionID,
-		&s.TotalEntries,
-		&s.BacklogEntries,
-		&s.LastEntryDate,
-		&s.UpdatedAt,
-	)
+	rows, err := r.db.Query(ctx, query)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+		return nil, fmt.Errorf("failed to query statistic definitions: %w", err)
+	}
+	defer rows.Close()
+
+	var defs []StatisticDefinition
+	for rows.Next() {
+		var d StatisticDefinition
+		if err := rows.Scan(&d.ID, &d.Title, &d.Description, &d.StatType, &d.FieldKey, &d.Aggregation, &d.IsDefault); err != nil {
+			return nil, fmt.Errorf("failed to scan statistic definition: %w", err)
 		}
-		return nil, fmt.Errorf("failed to get collection statistics: %w", err)
+		defs = append(defs, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating statistic definitions: %w", err)
 	}
 
-	return &s, nil
+	return defs, nil
 }
 
-// RefreshCollectionStatistics computes and upserts statistics for a collection
-// from the live entries table.
-func (r *CollectionRepository) RefreshCollectionStatistics(
+// GetCollectionStatConfigs returns the ordered stat configs for a collection.
+func (r *CollectionRepository) GetCollectionStatConfigs(
+	ctx context.Context,
+	collectionID uuid.UUID,
+) ([]CollectionStatConfig, error) {
+	query := `
+		SELECT statistic_id, position
+		FROM collection_statistic_configs
+		WHERE collection_id = $1
+		ORDER BY position
+	`
+
+	rows, err := r.db.Query(ctx, query, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query stat configs: %w", err)
+	}
+	defer rows.Close()
+
+	var configs []CollectionStatConfig
+	for rows.Next() {
+		var c CollectionStatConfig
+		if err := rows.Scan(&c.StatisticID, &c.Position); err != nil {
+			return nil, fmt.Errorf("failed to scan stat config: %w", err)
+		}
+		configs = append(configs, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating stat configs: %w", err)
+	}
+
+	return configs, nil
+}
+
+// SetCollectionStatConfigs replaces all stat configs for a collection within a transaction.
+func (r *CollectionRepository) SetCollectionStatConfigs(
+	ctx context.Context,
+	collectionID uuid.UUID,
+	configs []CollectionStatConfig,
+) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	_, err = tx.Exec(ctx,
+		`DELETE FROM collection_statistic_configs WHERE collection_id = $1`,
+		collectionID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing stat configs: %w", err)
+	}
+
+	for _, c := range configs {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO collection_statistic_configs (collection_id, statistic_id, position) VALUES ($1, $2, $3)`,
+			collectionID, c.StatisticID, c.Position,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert stat config: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// EnsureDefaultStatConfigs inserts the default stat configs for a collection if they don't exist yet.
+func (r *CollectionRepository) EnsureDefaultStatConfigs(
 	ctx context.Context,
 	collectionID uuid.UUID,
 ) error {
 	query := `
-		INSERT INTO collection_statistics (collection_id, total_entries, backlog_entries, last_entry_date, updated_at)
-		SELECT $1, COUNT(*), COUNT(*) FILTER (WHERE score = 0), MAX(date), NOW()
-		FROM entries WHERE collection_id = $1
-		ON CONFLICT (collection_id) DO UPDATE SET
-		  total_entries = EXCLUDED.total_entries,
-		  backlog_entries = EXCLUDED.backlog_entries,
-		  last_entry_date = EXCLUDED.last_entry_date,
-		  updated_at = NOW()
+		INSERT INTO collection_statistic_configs (collection_id, statistic_id, position)
+		SELECT $1, id,
+			CASE id
+				WHEN 'total_entries' THEN 0
+				WHEN 'backlog' THEN 1
+				WHEN 'last_entry' THEN 2
+				ELSE 99
+			END
+		FROM statistic_definitions
+		WHERE is_default = true
+		ON CONFLICT DO NOTHING
 	`
 
 	_, err := r.db.Exec(ctx, query, collectionID)
 	if err != nil {
-		return fmt.Errorf("failed to refresh collection statistics: %w", err)
+		return fmt.Errorf("failed to ensure default stat configs: %w", err)
 	}
 
 	return nil
+}
+
+// GetCollectionStatValues returns all cached stat values for a collection.
+func (r *CollectionRepository) GetCollectionStatValues(
+	ctx context.Context,
+	collectionID uuid.UUID,
+) ([]CollectionStatValue, error) {
+	query := `
+		SELECT statistic_id, display_value
+		FROM collection_statistic_values
+		WHERE collection_id = $1
+	`
+
+	rows, err := r.db.Query(ctx, query, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query stat values: %w", err)
+	}
+	defer rows.Close()
+
+	var values []CollectionStatValue
+	for rows.Next() {
+		var v CollectionStatValue
+		if err := rows.Scan(&v.StatisticID, &v.DisplayValue); err != nil {
+			return nil, fmt.Errorf("failed to scan stat value: %w", err)
+		}
+		values = append(values, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating stat values: %w", err)
+	}
+
+	return values, nil
+}
+
+// RefreshCollectionStatValues computes and upserts all configured stat values for a collection.
+func (r *CollectionRepository) RefreshCollectionStatValues(
+	ctx context.Context,
+	collectionID uuid.UUID,
+) error {
+	// Load configured stat IDs for this collection.
+	configs, err := r.GetCollectionStatConfigs(ctx, collectionID)
+	if err != nil {
+		return fmt.Errorf("failed to get stat configs: %w", err)
+	}
+	if len(configs) == 0 {
+		return nil
+	}
+
+	// Load all definitions so we can resolve each stat ID.
+	allDefs, err := r.GetStatisticDefinitions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get stat definitions: %w", err)
+	}
+	defsByID := make(map[string]StatisticDefinition, len(allDefs))
+	for _, d := range allDefs {
+		defsByID[d.ID] = d
+	}
+
+	// Compute a value for each configured stat.
+	computed := make([]CollectionStatValue, 0, len(configs))
+	for _, cfg := range configs {
+		def, ok := defsByID[cfg.StatisticID]
+		if !ok {
+			continue
+		}
+
+		val, err := r.computeStatValue(ctx, collectionID, def)
+		if err != nil {
+			return fmt.Errorf("failed to compute stat %q: %w", def.ID, err)
+		}
+		computed = append(computed, CollectionStatValue{StatisticID: def.ID, DisplayValue: val})
+	}
+
+	// Upsert computed values.
+	for _, v := range computed {
+		_, err := r.db.Exec(ctx, `
+			INSERT INTO collection_statistic_values (collection_id, statistic_id, display_value, updated_at)
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (collection_id, statistic_id) DO UPDATE SET
+				display_value = EXCLUDED.display_value,
+				updated_at = NOW()
+		`, collectionID, v.StatisticID, v.DisplayValue)
+		if err != nil {
+			return fmt.Errorf("failed to upsert stat value %q: %w", v.StatisticID, err)
+		}
+	}
+
+	return nil
+}
+
+// computeStatValue computes the display value for a single stat definition.
+func (r *CollectionRepository) computeStatValue(
+	ctx context.Context,
+	collectionID uuid.UUID,
+	def StatisticDefinition,
+) (string, error) {
+	if def.StatType == "builtin" {
+		return r.computeBuiltinStat(ctx, collectionID, def.ID)
+	}
+	if def.StatType == "field_aggregation" && def.FieldKey != nil && def.Aggregation != nil {
+		return r.computeFieldAggregationStat(ctx, collectionID, *def.FieldKey, *def.Aggregation)
+	}
+	return "—", nil
+}
+
+// computeBuiltinStat computes one of the built-in stats from the entries table.
+func (r *CollectionRepository) computeBuiltinStat(
+	ctx context.Context,
+	collectionID uuid.UUID,
+	statID string,
+) (string, error) {
+	switch statID {
+	case "total_entries":
+		var count int
+		err := r.db.QueryRow(ctx,
+			`SELECT COUNT(*) FROM entries WHERE collection_id = $1`,
+			collectionID,
+		).Scan(&count)
+		if err != nil {
+			return "", fmt.Errorf("failed to count entries: %w", err)
+		}
+		return fmt.Sprintf("%d", count), nil
+
+	case "backlog":
+		var count int
+		err := r.db.QueryRow(ctx,
+			`SELECT COUNT(*) FROM entries WHERE collection_id = $1 AND score = 0`,
+			collectionID,
+		).Scan(&count)
+		if err != nil {
+			return "", fmt.Errorf("failed to count backlog entries: %w", err)
+		}
+		return fmt.Sprintf("%d", count), nil
+
+	case "last_entry":
+		var lastDate *time.Time
+		err := r.db.QueryRow(ctx,
+			`SELECT MAX(date) FROM entries WHERE collection_id = $1`,
+			collectionID,
+		).Scan(&lastDate)
+		if err != nil {
+			return "", fmt.Errorf("failed to get last entry date: %w", err)
+		}
+		if lastDate == nil {
+			return "—", nil
+		}
+		return lastDate.Format("Jan 2, 2006"), nil
+
+	case "avg_score":
+		var avg *float64
+		err := r.db.QueryRow(ctx,
+			`SELECT AVG(score) FILTER (WHERE score > 0) FROM entries WHERE collection_id = $1`,
+			collectionID,
+		).Scan(&avg)
+		if err != nil {
+			return "", fmt.Errorf("failed to compute avg score: %w", err)
+		}
+		if avg == nil {
+			return "—", nil
+		}
+		return fmt.Sprintf("%.1f", *avg), nil
+
+	case "rated_pct":
+		var pct *float64
+		err := r.db.QueryRow(ctx,
+			`SELECT (COUNT(*) FILTER (WHERE score > 0))::float / NULLIF(COUNT(*), 0) * 100
+			 FROM entries WHERE collection_id = $1`,
+			collectionID,
+		).Scan(&pct)
+		if err != nil {
+			return "", fmt.Errorf("failed to compute rated pct: %w", err)
+		}
+		if pct == nil {
+			return "—", nil
+		}
+		return fmt.Sprintf("%d%%", int(*pct)), nil
+
+	default:
+		return "—", nil
+	}
+}
+
+// computeFieldAggregationStat computes an aggregation over a JSONB additional_field key.
+func (r *CollectionRepository) computeFieldAggregationStat(
+	ctx context.Context,
+	collectionID uuid.UUID,
+	fieldKey, aggregation string,
+) (string, error) {
+	switch aggregation {
+	case "count_top":
+		var val *string
+		err := r.db.QueryRow(ctx, `
+			SELECT additional_fields->$2 AS v
+			FROM entries
+			WHERE collection_id = $1
+			  AND additional_fields ? $2
+			  AND additional_fields->>$2 IS NOT NULL
+			  AND additional_fields->>$2 != ''
+			GROUP BY v
+			ORDER BY COUNT(*) DESC
+			LIMIT 1
+		`, collectionID, fieldKey).Scan(&val)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return "—", nil
+			}
+			return "", fmt.Errorf("failed to compute count_top for %q: %w", fieldKey, err)
+		}
+		if val == nil {
+			return "—", nil
+		}
+		// val is a JSON string value (quoted); strip surrounding quotes if present.
+		s := *val
+		if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+			s = s[1 : len(s)-1]
+		}
+		return s, nil
+
+	case "min":
+		var result *string
+		err := r.db.QueryRow(ctx, `
+			SELECT MIN((additional_fields->>$2)::numeric)::text
+			FROM entries
+			WHERE collection_id = $1
+			  AND additional_fields ? $2
+			  AND additional_fields->>$2 IS NOT NULL
+			  AND additional_fields->>$2 != ''
+		`, collectionID, fieldKey).Scan(&result)
+		if err != nil {
+			return "", fmt.Errorf("failed to compute min for %q: %w", fieldKey, err)
+		}
+		if result == nil {
+			return "—", nil
+		}
+		// Format as integer (drop any decimal point).
+		if f, err := parseNumericString(*result); err == nil {
+			return fmt.Sprintf("%d", int(f)), nil
+		}
+		return *result, nil
+
+	case "max":
+		var result *string
+		err := r.db.QueryRow(ctx, `
+			SELECT MAX((additional_fields->>$2)::numeric)::text
+			FROM entries
+			WHERE collection_id = $1
+			  AND additional_fields ? $2
+			  AND additional_fields->>$2 IS NOT NULL
+			  AND additional_fields->>$2 != ''
+		`, collectionID, fieldKey).Scan(&result)
+		if err != nil {
+			return "", fmt.Errorf("failed to compute max for %q: %w", fieldKey, err)
+		}
+		if result == nil {
+			return "—", nil
+		}
+		if f, err := parseNumericString(*result); err == nil {
+			return fmt.Sprintf("%d", int(f)), nil
+		}
+		return *result, nil
+
+	case "count_distinct":
+		var count int
+		err := r.db.QueryRow(ctx, `
+			SELECT COUNT(DISTINCT additional_fields->>$2)
+			FROM entries
+			WHERE collection_id = $1
+			  AND additional_fields ? $2
+			  AND additional_fields->>$2 IS NOT NULL
+			  AND additional_fields->>$2 != ''
+		`, collectionID, fieldKey).Scan(&count)
+		if err != nil {
+			return "", fmt.Errorf("failed to compute count_distinct for %q: %w", fieldKey, err)
+		}
+		return fmt.Sprintf("%d", count), nil
+
+	default:
+		return "—", nil
+	}
+}
+
+// parseNumericString parses a numeric string returned by PostgreSQL numeric casting.
+func parseNumericString(s string) (float64, error) {
+	var f float64
+	_, err := fmt.Sscanf(s, "%f", &f)
+	return f, err
+}
+
+// GetAvailableStatsForCollection returns all stat definitions relevant for this collection.
+// Builtin stats are always included; field_aggregation stats are only included if at least
+// one entry in the collection has that field key in additional_fields.
+func (r *CollectionRepository) GetAvailableStatsForCollection(
+	ctx context.Context,
+	collectionID uuid.UUID,
+) ([]StatisticDefinition, error) {
+	query := `
+		SELECT sd.id, sd.title, sd.description, sd.stat_type, sd.field_key, sd.aggregation, sd.is_default
+		FROM statistic_definitions sd
+		WHERE sd.stat_type = 'builtin'
+		   OR (sd.stat_type = 'field_aggregation' AND EXISTS (
+		       SELECT 1 FROM entries e
+		       WHERE e.collection_id = $1
+		         AND e.additional_fields ? sd.field_key
+		   ))
+		ORDER BY sd.id
+	`
+
+	rows, err := r.db.Query(ctx, query, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query available stats: %w", err)
+	}
+	defer rows.Close()
+
+	var defs []StatisticDefinition
+	for rows.Next() {
+		var d StatisticDefinition
+		if err := rows.Scan(&d.ID, &d.Title, &d.Description, &d.StatType, &d.FieldKey, &d.Aggregation, &d.IsDefault); err != nil {
+			return nil, fmt.Errorf("failed to scan stat definition: %w", err)
+		}
+		defs = append(defs, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating available stats: %w", err)
+	}
+
+	return defs, nil
 }
 
 // isUniqueViolation checks if an error is a PostgreSQL unique constraint violation (code 23505).
