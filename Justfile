@@ -10,7 +10,7 @@ simulator := "iPhone 17 Pro"
 device := ""
 scheme := "livlogios"
 project := "livlogios.xcodeproj"
-bundle_id := "net.avalarin.livlogios"
+bundle_id := "net.avalarin.groveapp"
 
 # Build and run iOS app (simulator by default, or device with: just device="iPhone" ios-run)
 ios-run:

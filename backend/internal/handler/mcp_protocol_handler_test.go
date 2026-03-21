@@ -107,7 +107,7 @@ func TestMCP_GetEntryTypes_ReturnsSystemTypes(t *testing.T) {
 		"Book":  false,
 		"Game":  false,
 		"Show":  false,
-		"Music": false,
+		"Album": false,
 		"Other": false,
 	}
 	for _, tp := range types {

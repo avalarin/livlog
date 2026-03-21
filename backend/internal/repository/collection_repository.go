@@ -19,20 +19,21 @@ var (
 )
 
 type Collection struct {
-	ID          uuid.UUID  `json:"id"`
-	UserID      *uuid.UUID `json:"user_id,omitempty"`
-	Name        string     `json:"name"`
-	Icon        string     `json:"icon"`
-	Color       string     `json:"color"`
-	IsTemplate  bool       `json:"is_template"`
-	Slug        *string    `json:"slug,omitempty"`
-	Description string     `json:"description"`
-	EntryCount  int        `json:"entry_count"`
-	MemberCount int        `json:"member_count"`
-	MyRole      string     `json:"my_role"`
-	SharedBy    *string    `json:"shared_by,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID                uuid.UUID   `json:"id"`
+	UserID            *uuid.UUID  `json:"user_id,omitempty"`
+	Name              string      `json:"name"`
+	Icon              string      `json:"icon"`
+	Color             string      `json:"color"`
+	IsTemplate        bool        `json:"is_template"`
+	Slug              *string     `json:"slug,omitempty"`
+	Description       string      `json:"description"`
+	AllowedEntryTypes []uuid.UUID `json:"allowed_entry_types"`
+	EntryCount        int         `json:"entry_count"`
+	MemberCount       int         `json:"member_count"`
+	MyRole            string      `json:"my_role"`
+	SharedBy          *string     `json:"shared_by,omitempty"`
+	CreatedAt         time.Time   `json:"created_at"`
+	UpdatedAt         time.Time   `json:"updated_at"`
 }
 
 type CollectionMember struct {
@@ -57,6 +58,7 @@ func (r *CollectionRepository) CreateCollection(
 	ctx context.Context,
 	userID uuid.UUID,
 	name, icon, color string,
+	allowedEntryTypes []uuid.UUID,
 ) (*Collection, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -64,19 +66,24 @@ func (r *CollectionRepository) CreateCollection(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if allowedEntryTypes == nil {
+		allowedEntryTypes = []uuid.UUID{}
+	}
+
 	insertQuery := `
-		INSERT INTO collections (user_id, name, icon, color)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, user_id, name, icon, color, created_at, updated_at
+		INSERT INTO collections (user_id, name, icon, color, allowed_entry_types)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, user_id, name, icon, color, COALESCE(allowed_entry_types, '{}'), created_at, updated_at
 	`
 
 	var collection Collection
-	err = tx.QueryRow(ctx, insertQuery, userID, name, icon, color).Scan(
+	err = tx.QueryRow(ctx, insertQuery, userID, name, icon, color, allowedEntryTypes).Scan(
 		&collection.ID,
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
 		&collection.Color,
+		&collection.AllowedEntryTypes,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
 	)
@@ -116,7 +123,8 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 		       cs.permission_level AS my_role, c.created_at, c.updated_at,
 		       CASE WHEN c.user_id = $1 THEN NULL
 		            ELSE (SELECT COALESCE(u.display_name, u.email) FROM users u WHERE u.id = cs.owner_id)
-		       END AS shared_by
+		       END AS shared_by,
+		       COALESCE(c.allowed_entry_types, '{}') AS allowed_entry_types
 		FROM collections c
 		JOIN collection_shares cs ON cs.collection_id = c.id AND cs.shared_with_user_id = $1
 		LEFT JOIN entries e ON e.collection_id = c.id
@@ -145,6 +153,7 @@ func (r *CollectionRepository) GetCollectionsByUserID(
 			&collection.CreatedAt,
 			&collection.UpdatedAt,
 			&collection.SharedBy,
+			&collection.AllowedEntryTypes,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan collection: %w", err)
@@ -168,7 +177,8 @@ func (r *CollectionRepository) GetCollectionByID(
 	query := `
 		SELECT c.id, c.user_id, c.name, c.icon, c.color, COUNT(DISTINCT e.id) AS entry_count,
 		       (SELECT COUNT(*) FROM collection_shares cs2 WHERE cs2.collection_id = c.id) AS member_count,
-		       cs.permission_level AS my_role, c.created_at, c.updated_at
+		       cs.permission_level AS my_role, c.created_at, c.updated_at,
+		       COALESCE(c.allowed_entry_types, '{}') AS allowed_entry_types
 		FROM collections c
 		JOIN collection_shares cs ON cs.collection_id = c.id
 		LEFT JOIN entries e ON e.collection_id = c.id
@@ -188,6 +198,7 @@ func (r *CollectionRepository) GetCollectionByID(
 		&collection.MyRole,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
+		&collection.AllowedEntryTypes,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -383,26 +394,32 @@ func (r *CollectionRepository) UpdateCollectionShare(
 	return tx.Commit(ctx)
 }
 
-// UpdateCollection updates a collection's name, icon, and/or color.
+// UpdateCollection updates a collection's name, icon, color, and allowed entry types.
 func (r *CollectionRepository) UpdateCollection(
 	ctx context.Context,
 	id uuid.UUID,
 	name, icon, color string,
+	allowedEntryTypes []uuid.UUID,
 ) (*Collection, error) {
+	if allowedEntryTypes == nil {
+		allowedEntryTypes = []uuid.UUID{}
+	}
+
 	query := `
 		UPDATE collections
-		SET name = $2, icon = $3, color = $4, updated_at = NOW()
+		SET name = $2, icon = $3, color = $4, allowed_entry_types = $5, updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, user_id, name, icon, color, created_at, updated_at
+		RETURNING id, user_id, name, icon, color, COALESCE(allowed_entry_types, '{}'), created_at, updated_at
 	`
 
 	var collection Collection
-	err := r.db.QueryRow(ctx, query, id, name, icon, color).Scan(
+	err := r.db.QueryRow(ctx, query, id, name, icon, color, allowedEntryTypes).Scan(
 		&collection.ID,
 		&collection.UserID,
 		&collection.Name,
 		&collection.Icon,
 		&collection.Color,
+		&collection.AllowedEntryTypes,
 		&collection.CreatedAt,
 		&collection.UpdatedAt,
 	)
@@ -421,7 +438,7 @@ func (r *CollectionRepository) CreateDefaultCollections(
 	ctx context.Context,
 	userID uuid.UUID,
 ) ([]*Collection, error) {
-	collection, err := r.CreateCollection(ctx, userID, "My List", "system:folder", "dodger-blue")
+	collection, err := r.CreateCollection(ctx, userID, "My List", "system:folder", "dodger-blue", []uuid.UUID{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create default collection: %w", err)
 	}
@@ -450,7 +467,7 @@ func (r *CollectionRepository) GetTemplateCollections(
 	ctx context.Context,
 ) ([]*Collection, error) {
 	query := `
-		SELECT id, name, icon, color, slug, description, created_at, updated_at
+		SELECT id, name, icon, color, slug, description, COALESCE(allowed_entry_types, '{}'), created_at, updated_at
 		FROM collections
 		WHERE is_template = true
 		ORDER BY created_at ASC
@@ -472,6 +489,7 @@ func (r *CollectionRepository) GetTemplateCollections(
 			&c.Color,
 			&c.Slug,
 			&c.Description,
+			&c.AllowedEntryTypes,
 			&c.CreatedAt,
 			&c.UpdatedAt,
 		)
@@ -495,7 +513,7 @@ func (r *CollectionRepository) GetTemplateBySlug(
 	slug string,
 ) (*Collection, error) {
 	query := `
-		SELECT id, name, icon, color, slug, description, created_at, updated_at
+		SELECT id, name, icon, color, slug, description, COALESCE(allowed_entry_types, '{}'), created_at, updated_at
 		FROM collections
 		WHERE is_template = true AND slug = $1
 	`
@@ -508,6 +526,7 @@ func (r *CollectionRepository) GetTemplateBySlug(
 		&c.Color,
 		&c.Slug,
 		&c.Description,
+		&c.AllowedEntryTypes,
 		&c.CreatedAt,
 		&c.UpdatedAt,
 	)

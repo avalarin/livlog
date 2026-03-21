@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -39,22 +40,31 @@ func (h *CollectionHandler) RegisterRoutes(r chi.Router) {
 }
 
 type createCollectionRequest struct {
-	Name  string `json:"name"`
-	Icon  string `json:"icon"`
-	Color string `json:"color"`
+	Name              string   `json:"name"`
+	Icon              string   `json:"icon"`
+	Color             string   `json:"color"`
+	AllowedEntryTypes []string `json:"allowed_entry_types"`
+}
+
+type updateCollectionRequest struct {
+	Name              string   `json:"name"`
+	Icon              string   `json:"icon"`
+	Color             string   `json:"color"`
+	AllowedEntryTypes []string `json:"allowed_entry_types"`
 }
 
 type collectionResponse struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Icon        string  `json:"icon"`
-	Color       string  `json:"color"`
-	EntryCount  int     `json:"entry_count"`
-	MemberCount int     `json:"member_count"`
-	MyRole      string  `json:"my_role"`
-	SharedBy    *string `json:"shared_by,omitempty"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Icon              string   `json:"icon"`
+	Color             string   `json:"color"`
+	AllowedEntryTypes []string `json:"allowed_entry_types"`
+	EntryCount        int      `json:"entry_count"`
+	MemberCount       int      `json:"member_count"`
+	MyRole            string   `json:"my_role"`
+	SharedBy          *string  `json:"shared_by,omitempty"`
+	CreatedAt         string   `json:"created_at"`
+	UpdatedAt         string   `json:"updated_at"`
 }
 
 type memberResponse struct {
@@ -119,7 +129,13 @@ func (h *CollectionHandler) CreateCollection(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	collection, err := h.collectionService.CreateCollection(r.Context(), uid, req.Name, req.Icon, req.Color)
+	allowedEntryTypes, err := parseUUIDs(req.AllowedEntryTypes)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid allowed_entry_types: "+err.Error(), err)
+		return
+	}
+
+	collection, err := h.collectionService.CreateCollection(r.Context(), uid, req.Name, req.Icon, req.Color, allowedEntryTypes)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCollectionName) || errors.Is(err, service.ErrInvalidIcon) || errors.Is(err, service.ErrInvalidColor) {
 			respondWithError(h.log, w, http.StatusBadRequest, err.Error(), err)
@@ -216,13 +232,19 @@ func (h *CollectionHandler) UpdateCollection(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var req createCollectionRequest
+	var req updateCollectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithError(h.log, w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
-	collection, err := h.collectionService.UpdateCollection(r.Context(), cid, uid, req.Name, req.Icon, req.Color)
+	allowedEntryTypes, err := parseUUIDs(req.AllowedEntryTypes)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid allowed_entry_types: "+err.Error(), err)
+		return
+	}
+
+	collection, err := h.collectionService.UpdateCollection(r.Context(), cid, uid, req.Name, req.Icon, req.Color, allowedEntryTypes)
 	if err != nil {
 		if errors.Is(err, repository.ErrCollectionNotFound) {
 			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
@@ -484,16 +506,35 @@ func (h *CollectionHandler) RemoveShare(w http.ResponseWriter, r *http.Request) 
 }
 
 func mapCollectionToResponse(c *repository.Collection) collectionResponse {
-	return collectionResponse{
-		ID:          c.ID.String(),
-		Name:        c.Name,
-		Icon:        c.Icon,
-		Color:       c.Color,
-		EntryCount:  c.EntryCount,
-		MemberCount: c.MemberCount,
-		MyRole:      c.MyRole,
-		SharedBy:    c.SharedBy,
-		CreatedAt:   c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:   c.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	allowedEntryTypes := make([]string, len(c.AllowedEntryTypes))
+	for i, id := range c.AllowedEntryTypes {
+		allowedEntryTypes[i] = id.String()
 	}
+
+	return collectionResponse{
+		ID:                c.ID.String(),
+		Name:              c.Name,
+		Icon:              c.Icon,
+		Color:             c.Color,
+		AllowedEntryTypes: allowedEntryTypes,
+		EntryCount:        c.EntryCount,
+		MemberCount:       c.MemberCount,
+		MyRole:            c.MyRole,
+		SharedBy:          c.SharedBy,
+		CreatedAt:         c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:         c.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+}
+
+// parseUUIDs converts a slice of UUID strings to []uuid.UUID.
+func parseUUIDs(strs []string) ([]uuid.UUID, error) {
+	result := make([]uuid.UUID, 0, len(strs))
+	for _, s := range strs {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid UUID %q: %w", s, err)
+		}
+		result = append(result, id)
+	}
+	return result, nil
 }
