@@ -62,7 +62,7 @@ enum AuthError: Error, LocalizedError {
     case invalidEmail
     case invalidVerificationCode
     case verificationCodeExpired
-    case rateLimitExceeded(retryAfter: Int?)
+    case rateLimitExceeded(retryAfter: Int?, limitType: String?)
     case unknown
 
     var errorDescription: String? {
@@ -83,11 +83,18 @@ enum AuthError: Error, LocalizedError {
             return "Invalid verification code"
         case .verificationCodeExpired:
             return "Verification code expired, please request a new one"
-        case .rateLimitExceeded(let seconds):
-            if let seconds = seconds {
-                return "Too many requests. Please wait \(seconds) seconds"
+        case .rateLimitExceeded(let retryAfter, let limitType):
+            if limitType == "device_limit" {
+                if let seconds = retryAfter {
+                    return "Too many sign-in attempts. Please wait \(seconds) seconds"
+                }
+                return "Too many sign-in attempts. Please try again later"
+            } else {
+                if let seconds = retryAfter {
+                    return "Code already sent. Please wait \(seconds) seconds"
+                }
+                return "Code already sent. Please try again later"
             }
-            return "Too many requests. Please try again later"
         case .unknown:
             return "An unknown error occurred"
         }

@@ -61,7 +61,10 @@ type EmailConfig struct {
 	APIKey             string `mapstructure:"api_key"`
 	FromName           string `mapstructure:"from_name"`
 	FromAddress        string `mapstructure:"from_address"`
-	ResendCooldown     string `mapstructure:"resend_cooldown"` // duration string like "180s"
+	ResendCooldown     string `mapstructure:"resend_cooldown"`    // duration string like "30s"; shown to users as resend timer
+	PerEmailCooldown   string `mapstructure:"per_email_cooldown"` // cooldown between sends per email address
+	DeviceMaxEmails    int    `mapstructure:"device_max_emails"`  // max distinct emails per device within DeviceWindow
+	DeviceWindow       string `mapstructure:"device_window"`      // window for per-device distinct-email limit
 	MaxCodesPerHour    int    `mapstructure:"max_codes_per_hour"`
 	IPRateLimitEnabled bool   `mapstructure:"ip_rate_limit_enabled"`
 }
@@ -142,7 +145,10 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("email.enabled", false)
 	v.SetDefault("email.from_name", "Grove")
 	v.SetDefault("email.from_address", "noreply@livlog.net")
-	v.SetDefault("email.resend_cooldown", "180s")
+	v.SetDefault("email.resend_cooldown", "30s")
+	v.SetDefault("email.per_email_cooldown", "30s")
+	v.SetDefault("email.device_max_emails", 3)
+	v.SetDefault("email.device_window", "120s")
 	v.SetDefault("email.max_codes_per_hour", 5)
 	v.SetDefault("email.ip_rate_limit_enabled", true)
 

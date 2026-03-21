@@ -31,6 +31,9 @@ type VerificationAttemptRepository interface {
 	RecordAttempt(ctx context.Context, email, deviceID, ipAddress string) error
 	HasRecentAttempt(ctx context.Context, email, deviceID, ipAddress string, cooldown time.Duration) (bool, error)
 	CountRecentAttempts(ctx context.Context, email string, window time.Duration) (int, error)
+	GetLastAttemptTime(ctx context.Context, email string, window time.Duration) (*time.Time, error)
+	CountDistinctEmailsByDevice(ctx context.Context, deviceID string, window time.Duration) (int, error)
+	GetOldestAttemptTimeByDevice(ctx context.Context, deviceID string, window time.Duration) (*time.Time, error)
 }
 
 // JWTProvider defines methods for JWT token operations

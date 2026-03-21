@@ -31,6 +31,14 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 )
 
+// RateLimitError carries rate limit details so the handler can return structured 429 responses.
+type RateLimitError struct {
+	RetryAfter int    // remaining seconds until the client may retry
+	LimitType  string // "email_cooldown" or "device_limit" or "hourly_limit"
+}
+
+func (e *RateLimitError) Error() string { return "rate limit exceeded" }
+
 type EmailAuthService struct {
 	userRepo           UserRepository
 	codeRepo           VerificationCodeRepository
@@ -38,6 +46,9 @@ type EmailAuthService struct {
 	jwtService         JWTProvider
 	emailSender        EmailProvider
 	resendCooldown     time.Duration
+	perEmailCooldown   time.Duration
+	deviceMaxEmails    int
+	deviceWindow       time.Duration
 	maxCodesPerHour    int
 	ipRateLimitEnabled bool
 }
@@ -51,6 +62,9 @@ func NewEmailAuthService(
 	resendCooldown time.Duration,
 	maxCodesPerHour int,
 	ipRateLimitEnabled bool,
+	perEmailCooldown time.Duration,
+	deviceMaxEmails int,
+	deviceWindow time.Duration,
 ) *EmailAuthService {
 	return &EmailAuthService{
 		userRepo:           userRepo,
@@ -59,6 +73,9 @@ func NewEmailAuthService(
 		jwtService:         jwtService,
 		emailSender:        emailSender,
 		resendCooldown:     resendCooldown,
+		perEmailCooldown:   perEmailCooldown,
+		deviceMaxEmails:    deviceMaxEmails,
+		deviceWindow:       deviceWindow,
 		maxCodesPerHour:    maxCodesPerHour,
 		ipRateLimitEnabled: ipRateLimitEnabled,
 	}
@@ -189,33 +206,64 @@ func (s *EmailAuthService) VerifyCode(ctx context.Context, email, code string) (
 	}, nil
 }
 
-// GetResendCooldown returns the configured cooldown in seconds
+// GetResendCooldown returns the per-email cooldown in seconds (shown to users as the resend timer)
 func (s *EmailAuthService) GetResendCooldown() int {
-	return int(s.resendCooldown.Seconds())
+	return int(s.perEmailCooldown.Seconds())
 }
 
-// checkRateLimit checks both the cooldown and hourly limits
-func (s *EmailAuthService) checkRateLimit(ctx context.Context, email, deviceID, ipAddress string) error {
-	// Check cooldown (3 min between attempts from same email/device/ip)
-	checkedIP := ipAddress
-	if !s.ipRateLimitEnabled {
-		checkedIP = ""
-	}
-	hasRecent, err := s.attemptRepo.HasRecentAttempt(ctx, email, deviceID, checkedIP, s.resendCooldown)
+// checkRateLimit enforces three independent limits:
+//  1. Per-email cooldown: minimum time between sends for the same email address.
+//  2. Per-device distinct-email cap: prevents a single device from spamming many addresses.
+//  3. Hourly per-email safety net: hard cap on total sends for one email per hour.
+func (s *EmailAuthService) checkRateLimit(ctx context.Context, email, deviceID, _ string) error {
+	// 1. Per-email cooldown
+	lastAttempt, err := s.attemptRepo.GetLastAttemptTime(ctx, email, s.perEmailCooldown)
 	if err != nil {
 		return fmt.Errorf("failed to check rate limit: %w", err)
 	}
-	if hasRecent {
-		return ErrRateLimitExceeded
+	if lastAttempt != nil {
+		elapsed := time.Since(*lastAttempt)
+		remaining := s.perEmailCooldown - elapsed
+		if remaining > 0 {
+			return &RateLimitError{
+				RetryAfter: int(remaining.Seconds()) + 1, // round up
+				LimitType:  "email_cooldown",
+			}
+		}
 	}
 
-	// Check hourly limit
+	// 2. Per-device distinct-email limit
+	if deviceID != "" {
+		distinctCount, err := s.attemptRepo.CountDistinctEmailsByDevice(ctx, deviceID, s.deviceWindow)
+		if err != nil {
+			return fmt.Errorf("failed to check device rate limit: %w", err)
+		}
+		if distinctCount >= s.deviceMaxEmails {
+			retryAfter := int(s.deviceWindow.Seconds())
+			oldest, err := s.attemptRepo.GetOldestAttemptTimeByDevice(ctx, deviceID, s.deviceWindow)
+			if err == nil && oldest != nil {
+				remaining := s.deviceWindow - time.Since(*oldest)
+				if remaining > 0 {
+					retryAfter = int(remaining.Seconds()) + 1
+				}
+			}
+			return &RateLimitError{
+				RetryAfter: retryAfter,
+				LimitType:  "device_limit",
+			}
+		}
+	}
+
+	// 3. Hourly per-email safety net
 	count, err := s.attemptRepo.CountRecentAttempts(ctx, email, time.Hour)
 	if err != nil {
 		return fmt.Errorf("failed to count attempts: %w", err)
 	}
 	if count >= s.maxCodesPerHour {
-		return ErrRateLimitExceeded
+		return &RateLimitError{
+			RetryAfter: int(time.Hour.Seconds()),
+			LimitType:  "hourly_limit",
+		}
 	}
 
 	return nil

@@ -31,11 +31,17 @@ func (m *mockUserRepo) GetUserByEmail(ctx context.Context, email string) (*repos
 }
 
 func (m *mockUserRepo) FindUserByProvider(ctx context.Context, provider, providerUserID string) (*repository.User, error) {
-	return m.findUserByProviderFn(ctx, provider, providerUserID)
+	if m.findUserByProviderFn != nil {
+		return m.findUserByProviderFn(ctx, provider, providerUserID)
+	}
+	return nil, repository.ErrUserNotFound
 }
 
 func (m *mockUserRepo) CreateUserWithProvider(ctx context.Context, email, displayName string, emailVerified bool, provider, providerUserID string) (*repository.User, error) {
-	return m.createUserWithProviderFn(ctx, email, displayName, emailVerified, provider, providerUserID)
+	if m.createUserWithProviderFn != nil {
+		return m.createUserWithProviderFn(ctx, email, displayName, emailVerified, provider, providerUserID)
+	}
+	return nil, fmt.Errorf("createUserWithProviderFn not set")
 }
 
 func (m *mockUserRepo) CreateAuthProvider(ctx context.Context, userID uuid.UUID, provider, providerUserID string) error {
@@ -46,11 +52,17 @@ func (m *mockUserRepo) CreateAuthProvider(ctx context.Context, userID uuid.UUID,
 }
 
 func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) error {
-	return m.saveRefreshTokenFn(ctx, userID, token, expiresAt)
+	if m.saveRefreshTokenFn != nil {
+		return m.saveRefreshTokenFn(ctx, userID, token, expiresAt)
+	}
+	return nil
 }
 
 func (m *mockUserRepo) GetUserAuthProviders(ctx context.Context, userID uuid.UUID) ([]string, error) {
-	return m.getUserAuthProvidersFn(ctx, userID)
+	if m.getUserAuthProvidersFn != nil {
+		return m.getUserAuthProvidersFn(ctx, userID)
+	}
+	return []string{}, nil
 }
 
 type mockCodeRepo struct {
@@ -78,9 +90,11 @@ func (m *mockCodeRepo) MarkCodeAsUsed(ctx context.Context, id uuid.UUID) error {
 }
 
 type mockAttemptRepo struct {
-	recordAttemptFn       func(ctx context.Context, email, deviceID, ipAddress string) error
-	hasRecentAttemptFn    func(ctx context.Context, email, deviceID, ipAddress string, cooldown time.Duration) (bool, error)
-	countRecentAttemptsFn func(ctx context.Context, email string, window time.Duration) (int, error)
+	recordAttemptFn               func(ctx context.Context, email, deviceID, ipAddress string) error
+	hasRecentAttemptFn            func(ctx context.Context, email, deviceID, ipAddress string, cooldown time.Duration) (bool, error)
+	countRecentAttemptsFn         func(ctx context.Context, email string, window time.Duration) (int, error)
+	getLastAttemptTimeFn          func(ctx context.Context, email string, window time.Duration) (*time.Time, error)
+	countDistinctEmailsByDeviceFn func(ctx context.Context, deviceID string, window time.Duration) (int, error)
 
 	// Capture args for assertions
 	lastRecordIP    string
@@ -94,11 +108,35 @@ func (m *mockAttemptRepo) RecordAttempt(ctx context.Context, email, deviceID, ip
 
 func (m *mockAttemptRepo) HasRecentAttempt(ctx context.Context, email, deviceID, ipAddress string, cooldown time.Duration) (bool, error) {
 	m.lastHasRecentIP = ipAddress
-	return m.hasRecentAttemptFn(ctx, email, deviceID, ipAddress, cooldown)
+	if m.hasRecentAttemptFn != nil {
+		return m.hasRecentAttemptFn(ctx, email, deviceID, ipAddress, cooldown)
+	}
+	return false, nil
 }
 
 func (m *mockAttemptRepo) CountRecentAttempts(ctx context.Context, email string, window time.Duration) (int, error) {
-	return m.countRecentAttemptsFn(ctx, email, window)
+	if m.countRecentAttemptsFn != nil {
+		return m.countRecentAttemptsFn(ctx, email, window)
+	}
+	return 0, nil
+}
+
+func (m *mockAttemptRepo) GetLastAttemptTime(ctx context.Context, email string, window time.Duration) (*time.Time, error) {
+	if m.getLastAttemptTimeFn != nil {
+		return m.getLastAttemptTimeFn(ctx, email, window)
+	}
+	return nil, nil
+}
+
+func (m *mockAttemptRepo) CountDistinctEmailsByDevice(ctx context.Context, deviceID string, window time.Duration) (int, error) {
+	if m.countDistinctEmailsByDeviceFn != nil {
+		return m.countDistinctEmailsByDeviceFn(ctx, deviceID, window)
+	}
+	return 0, nil
+}
+
+func (m *mockAttemptRepo) GetOldestAttemptTimeByDevice(ctx context.Context, deviceID string, window time.Duration) (*time.Time, error) {
+	return nil, nil
 }
 
 type mockJWTProvider struct {
@@ -241,9 +279,12 @@ func newService(
 	emailProvider EmailProvider,
 ) *EmailAuthService {
 	return NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider,
-		3*time.Minute, // resendCooldown
-		5,             // maxCodesPerHour
-		true,          // ipRateLimitEnabled
+		30*time.Second,  // resendCooldown
+		5,               // maxCodesPerHour
+		true,            // ipRateLimitEnabled
+		30*time.Second,  // perEmailCooldown
+		3,               // deviceMaxEmails
+		120*time.Second, // deviceWindow
 	)
 }
 
@@ -271,14 +312,23 @@ func TestSendVerificationCode_InvalidEmail(t *testing.T) {
 
 func TestSendVerificationCode_RateLimited_RecentAttempt(t *testing.T) {
 	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
-	attemptRepo.hasRecentAttemptFn = func(ctx context.Context, email, deviceID, ipAddress string, cooldown time.Duration) (bool, error) {
-		return true, nil
+	// Simulate a recent attempt recorded 5 seconds ago (within the 30s cooldown)
+	recentTime := time.Now().Add(-5 * time.Second)
+	attemptRepo.getLastAttemptTimeFn = func(ctx context.Context, email string, window time.Duration) (*time.Time, error) {
+		return &recentTime, nil
 	}
 	svc := newService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider)
 
 	err := svc.SendVerificationCode(context.Background(), testEmail, testDeviceID, testIPAddr)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Fatalf("expected ErrRateLimitExceeded, got: %v", err)
+	var rlErr *RateLimitError
+	if !errors.As(err, &rlErr) {
+		t.Fatalf("expected *RateLimitError, got: %v", err)
+	}
+	if rlErr.LimitType != "email_cooldown" {
+		t.Errorf("expected limit_type %q, got %q", "email_cooldown", rlErr.LimitType)
+	}
+	if rlErr.RetryAfter <= 0 {
+		t.Errorf("expected positive retry_after, got %d", rlErr.RetryAfter)
 	}
 }
 
@@ -289,11 +339,17 @@ func TestSendVerificationCode_RateLimited_HourlyMax(t *testing.T) {
 		return maxCodesPerHour, nil
 	}
 	svc := NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider,
-		3*time.Minute, maxCodesPerHour, true)
+		30*time.Second, maxCodesPerHour, true,
+		30*time.Second, 3, 120*time.Second,
+	)
 
 	err := svc.SendVerificationCode(context.Background(), testEmail, testDeviceID, testIPAddr)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Fatalf("expected ErrRateLimitExceeded, got: %v", err)
+	var rlErr *RateLimitError
+	if !errors.As(err, &rlErr) {
+		t.Fatalf("expected *RateLimitError, got: %v", err)
+	}
+	if rlErr.LimitType != "hourly_limit" {
+		t.Errorf("expected limit_type %q, got %q", "hourly_limit", rlErr.LimitType)
 	}
 }
 
@@ -362,28 +418,23 @@ func TestSendVerificationCode_EmailSendFailure(t *testing.T) {
 func TestSendVerificationCode_IPRateLimitDisabled(t *testing.T) {
 	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
 
-	// Record what IP is passed into these calls
-	var hasRecentIP, recordIP string
-	attemptRepo.hasRecentAttemptFn = func(ctx context.Context, email, deviceID, ipAddress string, cooldown time.Duration) (bool, error) {
-		hasRecentIP = ipAddress
-		return false, nil
-	}
+	// Record what IP is stored when ipRateLimitEnabled = false
+	var recordIP string
 	attemptRepo.recordAttemptFn = func(ctx context.Context, email, deviceID, ipAddress string) error {
 		recordIP = ipAddress
 		return nil
 	}
 
 	svc := NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider,
-		3*time.Minute, 5, false) // ipRateLimitEnabled = false
+		30*time.Second, 5, false, // ipRateLimitEnabled = false
+		30*time.Second, 3, 120*time.Second,
+	)
 
 	err := svc.SendVerificationCode(context.Background(), testEmail, testDeviceID, testIPAddr)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if hasRecentIP != "" {
-		t.Errorf("expected empty ipAddress for HasRecentAttempt when IP rate limiting disabled, got %q", hasRecentIP)
-	}
 	if recordIP != "" {
 		t.Errorf("expected empty ipAddress for RecordAttempt when IP rate limiting disabled, got %q", recordIP)
 	}
@@ -401,6 +452,7 @@ func TestVerifyCode_Success(t *testing.T) {
 	}
 	if resp == nil {
 		t.Fatal("expected non-nil AuthResponse")
+		return
 	}
 	if resp.AccessToken != "access-token" {
 		t.Errorf("unexpected access token: %q", resp.AccessToken)
@@ -510,14 +562,168 @@ func TestVerifyCode_NewUserCreated(t *testing.T) {
 
 func TestGetResendCooldown(t *testing.T) {
 	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
-	cooldown := 3 * time.Minute
+	perEmailCooldown := 45 * time.Second
 	svc := NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider,
-		cooldown, 5, true)
+		30*time.Second, 5, true,
+		perEmailCooldown, 3, 120*time.Second,
+	)
 
 	got := svc.GetResendCooldown()
-	expected := int(cooldown.Seconds())
+	expected := int(perEmailCooldown.Seconds())
 	if got != expected {
 		t.Errorf("expected %d, got %d", expected, got)
+	}
+}
+
+func TestSendVerificationCode_RateLimited_DeviceLimit(t *testing.T) {
+	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
+	// Simulate 3 distinct emails already sent from this device (>= deviceMaxEmails=3)
+	attemptRepo.countDistinctEmailsByDeviceFn = func(ctx context.Context, deviceID string, window time.Duration) (int, error) {
+		return 3, nil
+	}
+	svc := newService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider)
+
+	err := svc.SendVerificationCode(context.Background(), testEmail, testDeviceID, testIPAddr)
+	var rlErr *RateLimitError
+	if !errors.As(err, &rlErr) {
+		t.Fatalf("expected *RateLimitError, got: %v", err)
+	}
+	if rlErr.LimitType != "device_limit" {
+		t.Errorf("expected limit_type %q, got %q", "device_limit", rlErr.LimitType)
+	}
+	// GetOldestAttemptTimeByDevice returns nil, so RetryAfter falls back to full deviceWindow (120s)
+	expectedRetryAfter := 120
+	if rlErr.RetryAfter != expectedRetryAfter {
+		t.Errorf("expected retry_after %d (full device window), got %d", expectedRetryAfter, rlErr.RetryAfter)
+	}
+}
+
+func TestSendVerificationCode_DeviceLimit_SkippedWhenEmptyDeviceID(t *testing.T) {
+	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
+	// Even though this would exceed the limit, it should be skipped for empty deviceID
+	attemptRepo.countDistinctEmailsByDeviceFn = func(ctx context.Context, deviceID string, window time.Duration) (int, error) {
+		t.Fatal("CountDistinctEmailsByDevice should not be called with empty deviceID")
+		return 10, nil
+	}
+	svc := newService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider)
+
+	err := svc.SendVerificationCode(context.Background(), testEmail, "", testIPAddr)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestSendVerificationCode_AllLimitsPass(t *testing.T) {
+	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
+	// No recent attempt, 1 distinct email on device, 2 hourly attempts — all below limits
+	attemptRepo.getLastAttemptTimeFn = func(ctx context.Context, email string, window time.Duration) (*time.Time, error) {
+		return nil, nil
+	}
+	attemptRepo.countDistinctEmailsByDeviceFn = func(ctx context.Context, deviceID string, window time.Duration) (int, error) {
+		return 1, nil
+	}
+	attemptRepo.countRecentAttemptsFn = func(ctx context.Context, email string, window time.Duration) (int, error) {
+		return 2, nil
+	}
+	svc := newService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider)
+
+	err := svc.SendVerificationCode(context.Background(), testEmail, testDeviceID, testIPAddr)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestRateLimitError_RetryAfterCalculation(t *testing.T) {
+	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
+	// Attempt was 20 seconds ago, cooldown is 30s => remaining ~10s, RetryAfter should be 11 (rounded up)
+	recentTime := time.Now().Add(-20 * time.Second)
+	attemptRepo.getLastAttemptTimeFn = func(ctx context.Context, email string, window time.Duration) (*time.Time, error) {
+		return &recentTime, nil
+	}
+	svc := newService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider)
+
+	err := svc.SendVerificationCode(context.Background(), testEmail, testDeviceID, testIPAddr)
+	var rlErr *RateLimitError
+	if !errors.As(err, &rlErr) {
+		t.Fatalf("expected *RateLimitError, got: %v", err)
+	}
+	// remaining = 30s - 20s = 10s, RetryAfter = 10 + 1 = 11 (with possible ±1 for timing)
+	if rlErr.RetryAfter < 9 || rlErr.RetryAfter > 12 {
+		t.Errorf("expected retry_after around 11, got %d", rlErr.RetryAfter)
+	}
+}
+
+func TestFindOrCreateEmailUser_LinksToExistingAppleUser(t *testing.T) {
+	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
+
+	existingUser := newTestUser()
+	createProviderCalled := false
+
+	// No email provider for this user
+	userRepo.findUserByProviderFn = func(ctx context.Context, provider, providerUserID string) (*repository.User, error) {
+		return nil, repository.ErrUserNotFound
+	}
+	// But user exists with this email (registered via Apple)
+	userRepo.getUserByEmailFn = func(ctx context.Context, email string) (*repository.User, error) {
+		return existingUser, nil
+	}
+	userRepo.createAuthProviderFn = func(ctx context.Context, userID uuid.UUID, provider, providerUserID string) error {
+		createProviderCalled = true
+		if provider != "email" {
+			t.Errorf("expected provider %q, got %q", "email", provider)
+		}
+		if providerUserID != testEmail {
+			t.Errorf("expected providerUserID %q, got %q", testEmail, providerUserID)
+		}
+		return nil
+	}
+
+	svc := newService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider)
+
+	resp, err := svc.VerifyCode(context.Background(), testEmail, "123456")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !createProviderCalled {
+		t.Error("expected CreateAuthProvider to be called to link email provider")
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil AuthResponse")
+	}
+}
+
+func TestFindOrCreateEmailUser_CreatesNewWhenNoAccountExists(t *testing.T) {
+	userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider := defaultMocks()
+
+	newUser := newTestUser()
+	createCalled := false
+
+	// Neither provider lookup nor email lookup finds a user
+	userRepo.findUserByProviderFn = func(ctx context.Context, provider, providerUserID string) (*repository.User, error) {
+		return nil, repository.ErrUserNotFound
+	}
+	userRepo.getUserByEmailFn = func(ctx context.Context, email string) (*repository.User, error) {
+		return nil, repository.ErrUserNotFound
+	}
+	userRepo.createUserWithProviderFn = func(ctx context.Context, email, displayName string, emailVerified bool, provider, providerUserID string) (*repository.User, error) {
+		createCalled = true
+		if provider != "email" {
+			t.Errorf("expected provider %q, got %q", "email", provider)
+		}
+		return newUser, nil
+	}
+
+	svc := newService(userRepo, codeRepo, attemptRepo, jwtProvider, emailProvider)
+
+	resp, err := svc.VerifyCode(context.Background(), testEmail, "123456")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !createCalled {
+		t.Error("expected CreateUserWithProvider to be called for completely new user")
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil AuthResponse")
 	}
 }
 

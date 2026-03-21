@@ -15,7 +15,10 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showVerificationView = false
-    @State private var resendCooldown: Int = 180
+    @State private var resendCooldown: Int = 30
+    @State private var lastSentEmail: String?
+    @State private var lastSentAt: Date?
+    @State private var serverCooldown: Int = 30
 
     var body: some View {
         NavigationStack {
@@ -132,16 +135,46 @@ struct LoginView: View {
     private func handleEmailSignIn() {
         guard isEmailValid else { return }
 
+        // If same email and client-side cooldown still active, skip API call
+        if let lastEmail = lastSentEmail,
+           let sentAt = lastSentAt,
+           lastEmail == email {
+            let elapsed = Int(Date().timeIntervalSince(sentAt))
+            let remaining = serverCooldown - elapsed
+            if remaining > 0 {
+                resendCooldown = remaining
+                showVerificationView = true
+                return
+            }
+        }
+
         isLoading = true
 
         Task {
             do {
                 let response = try await appState.authService.sendVerificationCode(email: email)
                 resendCooldown = response.resendCooldown
+                lastSentEmail = email
+                lastSentAt = Date()
+                serverCooldown = response.resendCooldown
                 showVerificationView = true
             } catch {
                 if let authError = error as? AuthError {
-                    errorMessage = authError.errorDescription
+                    switch authError {
+                    case .rateLimitExceeded(let retryAfter, let limitType):
+                        if limitType == "email_cooldown" {
+                            let remaining = retryAfter ?? 30
+                            resendCooldown = remaining
+                            lastSentEmail = email
+                            // Back-calculate original send time from remaining seconds
+                            lastSentAt = Date().addingTimeInterval(Double(remaining - serverCooldown))
+                            showVerificationView = true
+                        } else {
+                            errorMessage = authError.errorDescription
+                        }
+                    default:
+                        errorMessage = authError.errorDescription
+                    }
                 } else {
                     errorMessage = "Failed to send verification code"
                 }
