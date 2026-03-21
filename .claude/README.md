@@ -97,13 +97,41 @@
 
 ### Code Review
 
-2 hooks работают в паре: 
+2 hooks работают в паре:
 - `PostToolUse` вызывает `.claude/hooks/track-modified-files.sh`
 - `Stop` вызывает `.claude/hooks/trigger-code-review.sh`
 
-Скрипт `track-modified-files.sh` запускается периодически и добавляет изменныенные файлы в `.claude/modified-files-pending-review.txt`.
+Скрипт `track-modified-files.sh` запускается на каждый Edit/Write/MultiEdit и добавляет изменённые файлы в `.claude/modified-files-pending-review.txt`.
 
 Скрипт `.claude/hooks/trigger-code-review.sh`:
 1. Проверяет `modified-files-pending-review.txt`
 2. Если файлы есть — очищает список и возвращает **exit code 2** (блокирует остановку), выдавая инструкцию запустить `code-reviewer` с конкретными файлами
 3. Если список пуст — разрешает остановку (exit code 0)
+
+---
+
+### Status Tracking
+
+Скрипт `.claude/hooks/update-status.sh` отслеживает текущее состояние работы Claude.
+
+**События:** `PostToolUse`, `Stop`, `Notification`
+
+**Что записывает в `.claude/status.json`:**
+```json
+{
+  "status": "working|waiting",
+  "phase": "planning|coding|testing|reviewing|idle",
+  "message": "Editing ContentView.swift",
+  "branch": "feature-branch",
+  "updated_at": "2026-03-21T13:00:00Z"
+}
+```
+
+**Определение фазы по инструментам:**
+- `Edit/Write/MultiEdit` → coding
+- `Bash(*test*/*build*)` → testing
+- `Bash(*lint*)`, `Agent(code-reviewer)` → reviewing
+- `TaskCreate/AskUserQuestion`, `Agent(system-analyst)` → planning
+- Остальные → сохраняют предыдущую фазу
+
+**Агрегация:** после каждого обновления синхронизирует статус в `.claude/all-statuses.json` основного worktree. Ключ — имя директории worktree. Позволяет видеть состояние всех параллельных сессий из одного файла.

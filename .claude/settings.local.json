@@ -21,7 +21,8 @@
       "WebSearch",
       "Bash(git:*)",
       "Bash(gh run:*)",
-      "Bash(bash .claude/skills/worktree-init/scripts/init-worktree.sh collection-stats-screen)"
+      "Bash(bash .claude/skills/worktree-init/scripts/init-worktree.sh collection-stats-screen)",
+      "Bash(CLAUDE_PROJECT_DIR=/Users/avprokopev/Projects/livlogios /Users/avprokopev/Projects/livlogios/.claude/hooks/update-status.sh)"
     ]
   },
   "hooks": {
@@ -34,6 +35,14 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/track-modified-files.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/update-status.sh"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -42,6 +51,24 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/trigger-code-review.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/update-status.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/update-status.sh"
           }
         ]
       }

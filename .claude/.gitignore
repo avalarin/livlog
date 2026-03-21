@@ -1,5 +1,7 @@
 worktrees
 temp
 modified-files-pending-review.txt
+status.json
+all-statuses.json
 .env
 .mcp.json
