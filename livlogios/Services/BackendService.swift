@@ -129,8 +129,22 @@ actor BackendService {
         }
 
         if httpResponse.statusCode == 429 {
-            let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After").flatMap(Int.init)
-            throw AuthError.rateLimitExceeded(retryAfter: retryAfter)
+            struct RateLimitResponse: Decodable {
+                let details: RateLimitDetails?
+                struct RateLimitDetails: Decodable {
+                    let retryAfter: Int?
+                    let limitType: String?
+                    enum CodingKeys: String, CodingKey {
+                        case retryAfter = "retry_after"
+                        case limitType = "limit_type"
+                    }
+                }
+            }
+            let rateLimitInfo = try? decoder.decode(RateLimitResponse.self, from: data)
+            let retryAfter = rateLimitInfo?.details?.retryAfter
+                ?? httpResponse.value(forHTTPHeaderField: "Retry-After").flatMap(Int.init)
+            let limitType = rateLimitInfo?.details?.limitType
+            throw AuthError.rateLimitExceeded(retryAfter: retryAfter, limitType: limitType)
         }
 
         if httpResponse.statusCode >= 400 {

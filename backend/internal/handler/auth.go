@@ -50,7 +50,8 @@ func (h *AuthHandler) AppleAuth(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidToken) ||
 			errors.Is(err, service.ErrInvalidIssuer) ||
-			errors.Is(err, service.ErrInvalidAudience) {
+			errors.Is(err, service.ErrInvalidAudience) ||
+			errors.Is(err, service.ErrTokenExpired) {
 			respondWithError(h.log, w, http.StatusUnauthorized, "Invalid Apple token", err)
 			return
 		}
@@ -158,10 +159,15 @@ type sendCodeResponse struct {
 	ResendCooldown int    `json:"resend_cooldown"`
 }
 
+type rateLimitDetails struct {
+	RetryAfter int    `json:"retry_after"`
+	LimitType  string `json:"limit_type"`
+}
+
 type rateLimitErrorResponse struct {
-	Error   string         `json:"error"`
-	Message string         `json:"message"`
-	Details map[string]int `json:"details"`
+	Error   string           `json:"error"`
+	Message string           `json:"message"`
+	Details rateLimitDetails `json:"details"`
 }
 
 func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Request) {
@@ -181,13 +187,13 @@ func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Reques
 			respondWithError(h.log, w, http.StatusBadRequest, "Invalid email format", err)
 			return
 		}
-		if errors.Is(err, service.ErrRateLimitExceeded) {
-			retryAfter := h.emailAuthService.GetResendCooldown()
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		var rlErr *service.RateLimitError
+		if errors.As(err, &rlErr) {
+			w.Header().Set("Retry-After", strconv.Itoa(rlErr.RetryAfter))
 			respondWithJSON(h.log, w, http.StatusTooManyRequests, rateLimitErrorResponse{
 				Error:   "RATE_LIMIT_EXCEEDED",
 				Message: "Please wait before requesting another code",
-				Details: map[string]int{"retry_after": retryAfter},
+				Details: rateLimitDetails{RetryAfter: rlErr.RetryAfter, LimitType: rlErr.LimitType},
 			})
 			return
 		}
@@ -224,13 +230,13 @@ func (h *AuthHandler) ResendVerificationCode(w http.ResponseWriter, r *http.Requ
 			respondWithError(h.log, w, http.StatusBadRequest, "Invalid email format", err)
 			return
 		}
-		if errors.Is(err, service.ErrRateLimitExceeded) {
-			retryAfter := h.emailAuthService.GetResendCooldown()
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		var rlErr *service.RateLimitError
+		if errors.As(err, &rlErr) {
+			w.Header().Set("Retry-After", strconv.Itoa(rlErr.RetryAfter))
 			respondWithJSON(h.log, w, http.StatusTooManyRequests, rateLimitErrorResponse{
 				Error:   "RATE_LIMIT_EXCEEDED",
 				Message: "Please wait before requesting another code",
-				Details: map[string]int{"retry_after": retryAfter},
+				Details: rateLimitDetails{RetryAfter: rlErr.RetryAfter, LimitType: rlErr.LimitType},
 			})
 			return
 		}

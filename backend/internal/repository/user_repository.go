@@ -144,19 +144,34 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*Use
 }
 
 func (r *UserRepository) DeleteUser(ctx context.Context, id uuid.UUID) error {
-	query := `
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Remove auth providers so the (provider, provider_user_id) slots
+	// become available if the user re-registers with the same email.
+	_, err = tx.Exec(ctx, `DELETE FROM user_auth_providers WHERE user_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete auth providers: %w", err)
+	}
+
+	result, err := tx.Exec(ctx, `
 		UPDATE users
 		SET deleted_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
-	`
-
-	result, err := r.db.Exec(ctx, query, id)
+	`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
 		return ErrUserNotFound
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
@@ -362,11 +377,9 @@ func (r *UserRepository) CreateUserWithProvider(
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Create or reassign auth provider (handles case where provider existed for a soft-deleted user)
 	providerQuery := `
 		INSERT INTO user_auth_providers (user_id, provider, provider_user_id)
 		VALUES ($1, $2, $3)
-		ON CONFLICT ON CONSTRAINT uq_auth_provider DO UPDATE SET user_id = EXCLUDED.user_id
 	`
 
 	_, err = tx.Exec(ctx, providerQuery, user.ID, provider, providerUserID)
