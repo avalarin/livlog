@@ -16,7 +16,6 @@ struct CollectionsView: View {
     @State private var sharingCollection: CollectionModel?
 
     @State private var isLoading = false
-    @State private var isCreatingDefaults = false
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var showingSettings = false
@@ -29,28 +28,13 @@ struct CollectionsView: View {
                     ContentUnavailableView {
                         Label("No Collections", systemImage: "folder")
                     } description: {
-                        Text("Create a collection to organize your entries")
-                    } actions: {
-                        Button {
-                            Task {
-                                await createDefaultCollections()
-                            }
-                        } label: {
-                            if isCreatingDefaults {
-                                ProgressView()
-                                    .frame(height: 20)
-                            } else {
-                                Text("Create Collection")
-                            }
-                        }
-                        .disabled(isCreatingDefaults)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        Text("Tap + to create a collection")
                     }
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 60)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 80)
+                    .listRowInsets(EdgeInsets())
                 } else {
                     ForEach(collections) { collection in
                         NavigationLink {
@@ -190,21 +174,6 @@ struct CollectionsView: View {
         }
     }
 
-    private func createDefaultCollections() async {
-        isCreatingDefaults = true
-        errorMessage = nil
-
-        do {
-            _ = try await CollectionService.shared.createDefaultCollections()
-            await loadData()
-        } catch {
-            errorMessage = "Failed to create default collections: \(error.localizedDescription)"
-            showError = true
-        }
-
-        isCreatingDefaults = false
-    }
-
     private func deleteCollection(_ collection: CollectionModel) async {
         errorMessage = nil
 
@@ -325,6 +294,10 @@ struct AddEditCollectionView: View {
     @State private var errorMessage: String?
     @State private var showError = false
 
+    // Entry types section state
+    @State private var selectedEntryTypes: Set<String> = []
+    @State private var availableTypes: [EntryTypeModel] = []
+
     // Template mode state
     @State private var includeTemplateEntries = true
 
@@ -383,12 +356,19 @@ struct AddEditCollectionView: View {
                     }
                 }
 
-                Section("Name") {
-                    TextField("Collection name", text: $name)
-                        .disabled(isEditing && !isOwner)
+                Section {
+                    HStack(spacing: 12) {
+                        CollectionIconView(icon: selectedIcon, color: selectedColor, size: 40)
+                        TextField("Collection name", text: $name)
+                            .disabled(isEditing && !isOwner)
+                    }
                 }
 
-                Section("Icon") {
+                if !availableTypes.isEmpty && isOwner {
+                    entryTypesSection
+                }
+
+                Section {
                     Picker("", selection: $iconTab) {
                         ForEach(IconTab.allCases, id: \.self) { tab in
                             Text(tab.rawValue).tag(tab)
@@ -442,7 +422,7 @@ struct AddEditCollectionView: View {
                     }
                 }
 
-                Section("Color") {
+                Section {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
                         ForEach(CollectionColor.allCases, id: \.self) { colorOption in
                             Button {
@@ -472,25 +452,11 @@ struct AddEditCollectionView: View {
                     }
                 }
 
-                Section {
-                    HStack {
-                        Text("Preview")
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        HStack(spacing: 8) {
-                            CollectionIconView(icon: selectedIcon, color: selectedColor, size: 32)
-                            Text(name.isEmpty ? "Collection Name" : name)
-                                .foregroundStyle(name.isEmpty ? .secondary : .primary)
-                        }
-                    }
-                }
-
                 if isEditing && isOwner {
                     membersSection
                 }
             }
+            .listSectionSpacing(.compact)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -524,6 +490,7 @@ struct AddEditCollectionView: View {
                     let parsed = CollectionIcon(raw: collection.icon)
                     selectedIcon = parsed
                     selectedColor = CollectionColor(rawValue: collection.color) ?? .dodgerBlue
+                    selectedEntryTypes = Set(collection.allowedEntryTypes)
                     switch parsed {
                     case .system:
                         iconTab = .system
@@ -548,6 +515,7 @@ struct AddEditCollectionView: View {
                 }
             }
             .task {
+                await loadAvailableTypes()
                 if isEditing && isOwner, let collection = editingCollection {
                     await loadMembers(collectionID: collection.id)
                 }
@@ -660,6 +628,60 @@ struct AddEditCollectionView: View {
         }
     }
 
+    @ViewBuilder
+    private var entryTypesSection: some View {
+        Section {
+            Text("Choose which types of entries can be added to this collection. Leave all unselected to allow any type.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 12) {
+                ForEach(availableTypes) { entryType in
+                    let isSelected = selectedEntryTypes.contains(entryType.id)
+                    Button {
+                        if isSelected {
+                            selectedEntryTypes.remove(entryType.id)
+                        } else {
+                            selectedEntryTypes.insert(entryType.id)
+                        }
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text(entryType.icon)
+                                .font(.title2)
+                            Text(entryType.name)
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(isSelected ? Color.accentColor.opacity(0.15) : Color(.systemGray6))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isEditing && !isOwner)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func loadAvailableTypes() async {
+        do {
+            availableTypes = try await TypeService.shared.getTypes()
+        } catch is CancellationError {
+            return
+        } catch {
+            // Non-fatal: type picker will stay hidden if types can't be loaded
+        }
+    }
+
     private func loadMembers(collectionID: String) async {
         isLoadingMembers = true
         defer { isLoadingMembers = false }
@@ -680,12 +702,17 @@ struct AddEditCollectionView: View {
         do {
             let iconRaw = selectedIcon.rawValue
             let colorRaw = selectedColor.rawValue
+            let allowedTypes = Array(selectedEntryTypes)
             switch mode {
             case .add:
-                let newCollection = try await CollectionService.shared.createCollection(name: name, icon: iconRaw, color: colorRaw)
+                let newCollection = try await CollectionService.shared.createCollection(
+                    name: name, icon: iconRaw, color: colorRaw, allowedEntryTypes: allowedTypes
+                )
                 onCollectionSaved?(newCollection)
             case .edit(let collection):
-                _ = try await CollectionService.shared.updateCollection(id: collection.id, name: name, icon: iconRaw, color: colorRaw)
+                _ = try await CollectionService.shared.updateCollection(
+                    id: collection.id, name: name, icon: iconRaw, color: colorRaw, allowedEntryTypes: allowedTypes
+                )
             case .addFromTemplate(let template):
                 try await OnboardingService.shared.createFromTemplate(
                     slug: template.slug,

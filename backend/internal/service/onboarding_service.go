@@ -77,7 +77,7 @@ func (s *OnboardingService) CreateCollectionFromTemplate(
 	}
 
 	newCollection, err := s.collectionRepo.CreateCollection(
-		ctx, userID, template.Name, template.Icon, template.Color,
+		ctx, userID, template.Name, template.Icon, template.Color, template.AllowedEntryTypes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create collection from template: %w", err)

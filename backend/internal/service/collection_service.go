@@ -86,6 +86,7 @@ func (s *CollectionService) CreateCollection(
 	ctx context.Context,
 	userID uuid.UUID,
 	name, icon, color string,
+	allowedEntryTypes []uuid.UUID,
 ) (*repository.Collection, error) {
 	// Validate name
 	name = strings.TrimSpace(name)
@@ -105,7 +106,7 @@ func (s *CollectionService) CreateCollection(
 		return nil, err
 	}
 
-	return s.collectionRepo.CreateCollection(ctx, userID, name, icon, color)
+	return s.collectionRepo.CreateCollection(ctx, userID, name, icon, color, allowedEntryTypes)
 }
 
 // GetCollectionsByUserID retrieves all collections for a user
@@ -131,6 +132,7 @@ func (s *CollectionService) UpdateCollection(
 	id uuid.UUID,
 	userID uuid.UUID,
 	name, icon, color string,
+	allowedEntryTypes []uuid.UUID,
 ) (*repository.Collection, error) {
 	// Verify requester is owner
 	role, err := s.collectionRepo.GetUserRole(ctx, id, userID)
@@ -162,7 +164,7 @@ func (s *CollectionService) UpdateCollection(
 		return nil, err
 	}
 
-	if _, err := s.collectionRepo.UpdateCollection(ctx, id, name, icon, color); err != nil {
+	if _, err := s.collectionRepo.UpdateCollection(ctx, id, name, icon, color, allowedEntryTypes); err != nil {
 		return nil, err
 	}
 

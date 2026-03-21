@@ -42,6 +42,7 @@ struct CollectionModel: Codable, Identifiable {
     let name: String
     let icon: String
     let color: String
+    let allowedEntryTypes: [String]
     let entryCount: Int
     let memberCount: Int
     let myRole: CollectionRole
@@ -54,6 +55,7 @@ struct CollectionModel: Codable, Identifiable {
         case name
         case icon
         case color
+        case allowedEntryTypes = "allowed_entry_types"
         case entryCount = "entry_count"
         case memberCount = "member_count"
         case myRole = "my_role"
@@ -67,6 +69,7 @@ struct CollectionModel: Codable, Identifiable {
         name: String,
         icon: String,
         color: String = "dodger-blue",
+        allowedEntryTypes: [String] = [],
         entryCount: Int = 0,
         memberCount: Int = 1,
         myRole: CollectionRole = .owner,
@@ -78,6 +81,7 @@ struct CollectionModel: Codable, Identifiable {
         self.name = name
         self.icon = icon
         self.color = color
+        self.allowedEntryTypes = allowedEntryTypes
         self.entryCount = entryCount
         self.memberCount = memberCount
         self.myRole = myRole
@@ -93,6 +97,7 @@ struct CollectionModel: Codable, Identifiable {
         name = try container.decode(String.self, forKey: .name)
         icon = try container.decode(String.self, forKey: .icon)
         color = try container.decodeIfPresent(String.self, forKey: .color) ?? "dodger-blue"
+        allowedEntryTypes = try container.decodeIfPresent([String].self, forKey: .allowedEntryTypes) ?? []
         entryCount = try container.decodeIfPresent(Int.self, forKey: .entryCount) ?? 0
         memberCount = try container.decodeIfPresent(Int.self, forKey: .memberCount) ?? 1
         myRole = try container.decodeIfPresent(CollectionRole.self, forKey: .myRole) ?? .read
@@ -109,6 +114,7 @@ struct CollectionModel: Codable, Identifiable {
         try container.encode(name, forKey: .name)
         try container.encode(icon, forKey: .icon)
         try container.encode(color, forKey: .color)
+        try container.encode(allowedEntryTypes, forKey: .allowedEntryTypes)
         try container.encode(entryCount, forKey: .entryCount)
         try container.encode(memberCount, forKey: .memberCount)
         try container.encode(myRole, forKey: .myRole)

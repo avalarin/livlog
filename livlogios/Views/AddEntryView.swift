@@ -188,23 +188,25 @@ struct AddEntryView: View {
 
     @ViewBuilder
     private var typePickerSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(types) { type in
-                        TypeButton(
-                            entryType: type,
-                            isSelected: selectedType?.id == type.id
-                        ) {
-                            withAnimation(.spring(response: 0.3)) {
-                                selectedType = type
+        if types.count != 1 {
+            VStack(alignment: .leading, spacing: 12) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(types) { type in
+                            TypeButton(
+                                entryType: type,
+                                isSelected: selectedType?.id == type.id
+                            ) {
+                                withAnimation(.spring(response: 0.3)) {
+                                    selectedType = type
+                                }
                             }
                         }
                     }
                 }
             }
+            .padding(.horizontal)
         }
-        .padding(.horizontal)
     }
 
     @ViewBuilder
@@ -340,7 +342,19 @@ struct AddEntryView: View {
         errorMessage = nil
 
         do {
-            types = try await TypeService.shared.getTypes()
+            var loadedTypes = try await TypeService.shared.getTypes()
+
+            // Filter to allowed types if the collection has a restriction
+            let allowedIDs = collection.allowedEntryTypes
+            if !allowedIDs.isEmpty {
+                loadedTypes = loadedTypes.filter { allowedIDs.contains($0.id) }
+            }
+            types = loadedTypes
+
+            // Auto-select when exactly one type is configured
+            if types.count == 1 {
+                selectedType = types[0]
+            }
 
             if let entryID = editingEntryID {
                 let entry = try await EntryService.shared.getEntry(id: entryID)

@@ -42,14 +42,22 @@ actor CollectionService {
 
     // MARK: - Create Collection
 
-    func createCollection(name: String, icon: String, color: String) async throws -> CollectionModel {
+    func createCollection(name: String, icon: String, color: String, allowedEntryTypes: [String] = []) async throws -> CollectionModel {
         struct Request: Codable {
             let name: String
             let icon: String
             let color: String
+            let allowedEntryTypes: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case name
+                case icon
+                case color
+                case allowedEntryTypes = "allowed_entry_types"
+            }
         }
 
-        let request = Request(name: name, icon: icon, color: color)
+        let request = Request(name: name, icon: icon, color: color, allowedEntryTypes: allowedEntryTypes)
         let bodyData = try encoder.encode(request)
 
         let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
@@ -74,14 +82,22 @@ actor CollectionService {
 
     // MARK: - Update Collection
 
-    func updateCollection(id: String, name: String, icon: String, color: String) async throws -> CollectionModel {
+    func updateCollection(id: String, name: String, icon: String, color: String, allowedEntryTypes: [String] = []) async throws -> CollectionModel {
         struct Request: Codable {
             let name: String
             let icon: String
             let color: String
+            let allowedEntryTypes: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case name
+                case icon
+                case color
+                case allowedEntryTypes = "allowed_entry_types"
+            }
         }
 
-        let request = Request(name: name, icon: icon, color: color)
+        let request = Request(name: name, icon: icon, color: color, allowedEntryTypes: allowedEntryTypes)
         let bodyData = try encoder.encode(request)
 
         let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
