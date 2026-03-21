@@ -269,10 +269,6 @@ func (h *CollectionHandler) DeleteCollection(w http.ResponseWriter, r *http.Requ
 			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
 			return
 		}
-		if errors.Is(err, service.ErrLastOwner) {
-			respondWithError(h.log, w, http.StatusConflict, err.Error(), err)
-			return
-		}
 		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to leave collection", err)
 		return
 	}

@@ -16,7 +16,6 @@ struct CollectionsView: View {
     @State private var sharingCollection: CollectionModel?
 
     @State private var isLoading = false
-    @State private var isCreatingDefaults = false
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var showingSettings = false
@@ -29,28 +28,13 @@ struct CollectionsView: View {
                     ContentUnavailableView {
                         Label("No Collections", systemImage: "folder")
                     } description: {
-                        Text("Create a collection to organize your entries")
-                    } actions: {
-                        Button {
-                            Task {
-                                await createDefaultCollections()
-                            }
-                        } label: {
-                            if isCreatingDefaults {
-                                ProgressView()
-                                    .frame(height: 20)
-                            } else {
-                                Text("Create Collection")
-                            }
-                        }
-                        .disabled(isCreatingDefaults)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        Text("Tap + to create a collection")
                     }
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 60)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 80)
+                    .listRowInsets(EdgeInsets())
                 } else {
                     ForEach(collections) { collection in
                         NavigationLink {
@@ -188,21 +172,6 @@ struct CollectionsView: View {
             errorMessage = error.localizedDescription
             showError = true
         }
-    }
-
-    private func createDefaultCollections() async {
-        isCreatingDefaults = true
-        errorMessage = nil
-
-        do {
-            _ = try await CollectionService.shared.createDefaultCollections()
-            await loadData()
-        } catch {
-            errorMessage = "Failed to create default collections: \(error.localizedDescription)"
-            showError = true
-        }
-
-        isCreatingDefaults = false
     }
 
     private func deleteCollection(_ collection: CollectionModel) async {

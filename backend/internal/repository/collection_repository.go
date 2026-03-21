@@ -289,7 +289,7 @@ func (r *CollectionRepository) AddCollectionShare(
 }
 
 // RemoveCollectionShare removes a user from a collection within a single transaction.
-// If the target user is the last owner the operation is rejected with ErrLastOwner.
+// The last owner is allowed to leave; the collection becomes orphaned.
 func (r *CollectionRepository) RemoveCollectionShare(
 	ctx context.Context,
 	collectionID, userID uuid.UUID,
@@ -300,34 +300,19 @@ func (r *CollectionRepository) RemoveCollectionShare(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Lock the target row to prevent concurrent removals from racing.
-	var targetRole string
+	// Verify membership exists before deleting.
+	var exists bool
 	err = tx.QueryRow(ctx,
-		`SELECT permission_level FROM collection_shares
+		`SELECT EXISTS(SELECT 1 FROM collection_shares
 		 WHERE collection_id = $1 AND shared_with_user_id = $2
-		 FOR UPDATE`,
+		 FOR UPDATE)`,
 		collectionID, userID,
-	).Scan(&targetRole)
+	).Scan(&exists)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrCollectionNotFound
-		}
-		return fmt.Errorf("failed to get target role: %w", err)
+		return fmt.Errorf("failed to check membership: %w", err)
 	}
-
-	if targetRole == "owner" {
-		var ownerCount int
-		err = tx.QueryRow(ctx,
-			`SELECT COUNT(*) FROM collection_shares
-			 WHERE collection_id = $1 AND permission_level = 'owner'`,
-			collectionID,
-		).Scan(&ownerCount)
-		if err != nil {
-			return fmt.Errorf("failed to count owners: %w", err)
-		}
-		if ownerCount <= 1 {
-			return ErrLastOwner
-		}
+	if !exists {
+		return ErrCollectionNotFound
 	}
 
 	_, err = tx.Exec(ctx,
