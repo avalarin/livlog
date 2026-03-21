@@ -69,3 +69,53 @@ func TestValidateColor_Invalid(t *testing.T) {
 		}
 	}
 }
+
+// --- CollectionService statistics tests ---
+//
+// NOTE: CollectionService takes a concrete *repository.CollectionRepository (not an interface),
+// so it cannot be unit-tested with hand-rolled mocks without modifying production code.
+//
+// NewCollectionService signature:
+//
+//	func NewCollectionService(
+//	    collectionRepo *repository.CollectionRepository,
+//	    userRepo       *repository.UserRepository,
+//	) *CollectionService
+//
+// Because both fields are concrete pointer types backed by a live database connection,
+// there is no injection seam available for the statistics methods
+// (GetCollectionStatistics, GetAvailableStatistics, UpdateStatisticsConfig).
+//
+// Recommended path forward (choose one):
+//
+//  1. Extract a CollectionRepository interface in the service package covering the methods
+//     used by the statistics functions (GetUserRole, EnsureDefaultStatConfigs,
+//     GetCollectionStatConfigs, GetStatisticDefinitions, GetCollectionStatValues,
+//     RefreshCollectionStatValues, GetAvailableStatsForCollection, SetCollectionStatConfigs),
+//     then change CollectionService to hold that interface. This is the standard Go pattern
+//     and keeps production code clean.
+//
+//  2. Write integration tests against a real (test) database using testcontainers or a
+//     local Postgres instance spun up by the test binary. The backend already uses pgx
+//     directly, so a test helper that creates a *repository.CollectionRepository with a
+//     test connection pool would cover all the same scenarios listed below.
+//
+// The 12 test scenarios that should be covered once a seam is available:
+//
+//  GetCollectionStatistics
+//   - HappyPath_CacheHit:             cached values exist, returns stats in config order
+//   - CacheMiss_TriggersRefresh:       empty cache, refresh called, returns stats
+//   - AccessDenied:                    GetUserRole returns ErrCollectionNotFound
+//   - MissingDefinition_Skipped:       config has stat ID not in definitions, row skipped
+//   - MissingCacheValue_ShowsDash:     stat in config but not in cache values, shows "—"
+//
+//  GetAvailableStatistics
+//   - EnabledAndDisabled:              enabled stats get their position, disabled get -1
+//   - AccessDenied:                    GetUserRole returns ErrCollectionNotFound
+//
+//  UpdateStatisticsConfig
+//   - OwnerCanUpdate:                  role "owner", succeeds
+//   - WriterCanUpdate:                 role "write", succeeds
+//   - ReadRoleForbidden:               role "read", returns ErrNotCollectionOwner
+//   - UnknownStatID:                   unknown stat ID, returns error containing "unknown statistic id"
+//   - EmptyStatIDs:                    empty slice, clears config successfully
