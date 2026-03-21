@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -50,6 +52,64 @@ func (r *VerificationAttemptRepository) CountRecentAttempts(ctx context.Context,
 		email, since,
 	).Scan(&count)
 	return count, err
+}
+
+// GetLastAttemptTime returns the created_at of the most recent attempt for this email
+// within the given window. Returns nil if no recent attempt exists.
+func (r *VerificationAttemptRepository) GetLastAttemptTime(ctx context.Context, email string, window time.Duration) (*time.Time, error) {
+	since := time.Now().Add(-window)
+
+	var t time.Time
+	err := r.pool.QueryRow(ctx,
+		`SELECT created_at FROM verification_attempts
+		 WHERE email = $1 AND created_at > $2
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		email, since,
+	).Scan(&t)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+// CountDistinctEmailsByDevice counts the number of distinct emails attempted
+// from the given device within the window.
+func (r *VerificationAttemptRepository) CountDistinctEmailsByDevice(ctx context.Context, deviceID string, window time.Duration) (int, error) {
+	since := time.Now().Add(-window)
+
+	var count int
+	err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(DISTINCT email) FROM verification_attempts
+		 WHERE device_id = $1 AND created_at > $2`,
+		deviceID, since,
+	).Scan(&count)
+	return count, err
+}
+
+// GetOldestAttemptTimeByDevice returns the created_at of the oldest attempt
+// from this device within the given window. Returns nil if no attempt exists.
+func (r *VerificationAttemptRepository) GetOldestAttemptTimeByDevice(ctx context.Context, deviceID string, window time.Duration) (*time.Time, error) {
+	since := time.Now().Add(-window)
+
+	var t time.Time
+	err := r.pool.QueryRow(ctx,
+		`SELECT created_at FROM verification_attempts
+		 WHERE device_id = $1 AND created_at > $2
+		 ORDER BY created_at ASC
+		 LIMIT 1`,
+		deviceID, since,
+	).Scan(&t)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
 }
 
 // CleanupOldAttempts removes attempts older than the given duration

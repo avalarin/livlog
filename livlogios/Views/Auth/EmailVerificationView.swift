@@ -21,6 +21,7 @@ struct EmailVerificationView: View {
     @State private var errorMessage: String?
     @State private var resendTimer: Int = 0
     @State private var timerActive = false
+    @State private var activeTimer: Timer?
 
     var body: some View {
         VStack(spacing: 32) {
@@ -195,7 +196,17 @@ struct EmailVerificationView: View {
                 startResendTimer(cooldown: response.resendCooldown)
             } catch {
                 if let authError = error as? AuthError {
-                    errorMessage = authError.errorDescription
+                    switch authError {
+                    case .rateLimitExceeded(let retryAfter, let limitType):
+                        if limitType == "device_limit" {
+                            errorMessage = authError.errorDescription
+                        } else {
+                            // email_cooldown or unknown: restart the timer
+                            startResendTimer(cooldown: retryAfter ?? resendCooldown)
+                        }
+                    default:
+                        errorMessage = authError.errorDescription
+                    }
                 } else {
                     errorMessage = "Failed to resend code"
                 }
@@ -205,15 +216,19 @@ struct EmailVerificationView: View {
     }
 
     private func startResendTimer(cooldown: Int? = nil) {
+        activeTimer?.invalidate()
         resendTimer = cooldown ?? resendCooldown
         timerActive = true
 
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-            if resendTimer > 0 {
-                resendTimer -= 1
-            } else {
-                timerActive = false
-                timer.invalidate()
+        activeTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            DispatchQueue.main.async {
+                if resendTimer > 0 {
+                    resendTimer -= 1
+                } else {
+                    timerActive = false
+                    timer.invalidate()
+                    activeTimer = nil
+                }
             }
         }
     }

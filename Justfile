@@ -11,6 +11,7 @@ device := ""
 scheme := "livlogios"
 project := "livlogios.xcodeproj"
 bundle_id := "net.avalarin.groveapp"
+team_id := "ZY6GYZY62T"
 
 # Build and run iOS app (simulator by default, or device with: just device="iPhone" ios-run)
 ios-run:
@@ -24,6 +25,7 @@ ios-run:
             -destination 'platform=iOS,name={{device}}' \
             -configuration Debug \
             -allowProvisioningUpdates \
+            DEVELOPMENT_TEAM={{team_id}} \
             | tail -n 5
         echo "Installing and launching on {{device}}..."
         xcrun devicectl device install app \
@@ -34,6 +36,7 @@ ios-run:
                 -destination 'platform=iOS,name={{device}}' \
                 -configuration Debug \
                 -allowProvisioningUpdates \
+                DEVELOPMENT_TEAM={{team_id}} \
                 -showBuildSettings 2>/dev/null \
               | grep -m1 'BUILT_PRODUCTS_DIR' \
               | sed 's/.*= //')/{{scheme}}.app"
@@ -45,6 +48,7 @@ ios-run:
             -scheme {{scheme}} \
             -destination 'platform=iOS Simulator,name={{simulator}}' \
             -configuration Debug \
+            DEVELOPMENT_TEAM={{team_id}} \
             | tail -n 5
         xcrun simctl boot "{{simulator}}" 2>/dev/null || true
         open -a Simulator
@@ -53,6 +57,7 @@ ios-run:
             -scheme {{scheme}} \
             -destination 'platform=iOS Simulator,name={{simulator}}' \
             -configuration Debug \
+            DEVELOPMENT_TEAM={{team_id}} \
             -showBuildSettings 2>/dev/null \
           | grep -m1 'BUILT_PRODUCTS_DIR' \
           | sed 's/.*= //')
@@ -67,6 +72,7 @@ ios-build:
         -scheme {{scheme}} \
         -destination 'platform=iOS Simulator,name={{simulator}}' \
         -configuration Debug \
+        DEVELOPMENT_TEAM={{team_id}} \
         | tail -n 5
 
 # Run iOS tests
@@ -74,7 +80,8 @@ ios-test:
     xcodebuild test \
         -project {{project}} \
         -scheme {{scheme}} \
-        -destination 'platform=iOS Simulator,name={{simulator}}'
+        -destination 'platform=iOS Simulator,name={{simulator}}' \
+        DEVELOPMENT_TEAM={{team_id}}
 
 # Clean iOS build artifacts
 ios-clean:

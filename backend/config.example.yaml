@@ -31,7 +31,7 @@ jwt:
   audience: "livlog-app"
 
 apple:
-  bundle_id: "net.avalarin.livlog"
+  bundle_id: "net.avalarin.groveapp"
 
 openrouter:
   # OpenRouter API key for AI search

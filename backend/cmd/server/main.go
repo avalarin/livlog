@@ -96,10 +96,20 @@ func main() {
 
 	authService := service.NewAuthService(userRepo, appleVerifier, jwtService)
 
-	// Parse email resend cooldown duration
+	// Parse email duration config values
 	resendCooldown, err := time.ParseDuration(cfg.Email.ResendCooldown)
 	if err != nil {
 		log.Fatal("failed to parse email.resend_cooldown", zap.Error(err))
+	}
+
+	perEmailCooldown, err := time.ParseDuration(cfg.Email.PerEmailCooldown)
+	if err != nil {
+		log.Fatal("failed to parse email.per_email_cooldown", zap.Error(err))
+	}
+
+	deviceWindow, err := time.ParseDuration(cfg.Email.DeviceWindow)
+	if err != nil {
+		log.Fatal("failed to parse email.device_window", zap.Error(err))
 	}
 
 	// Validate email config
@@ -111,7 +121,11 @@ func main() {
 	emailSender := service.NewEmailSender(cfg.Email.Enabled, cfg.Email.APIKey, cfg.Email.FromName, cfg.Email.FromAddress, log)
 
 	// Initialize email auth service
-	emailAuthService := service.NewEmailAuthService(userRepo, codeRepo, attemptRepo, jwtService, emailSender, resendCooldown, cfg.Email.MaxCodesPerHour, cfg.Email.IPRateLimitEnabled)
+	emailAuthService := service.NewEmailAuthService(
+		userRepo, codeRepo, attemptRepo, jwtService, emailSender,
+		resendCooldown, cfg.Email.MaxCodesPerHour, cfg.Email.IPRateLimitEnabled,
+		perEmailCooldown, cfg.Email.DeviceMaxEmails, deviceWindow,
+	)
 
 	// Initialize collection, entry, and type services
 	collectionService := service.NewCollectionService(collectionRepo, userRepo)

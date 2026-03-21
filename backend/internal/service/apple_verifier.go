@@ -25,11 +25,29 @@ var (
 
 const appleKeysURL = "https://appleid.apple.com/auth/keys"
 
+// appleBool handles Apple's inconsistent JSON encoding where boolean fields
+// may be sent as either a JSON boolean (true/false) or a string ("true"/"false").
+type appleBool bool
+
+func (b *appleBool) UnmarshalJSON(data []byte) error {
+	var boolVal bool
+	if err := json.Unmarshal(data, &boolVal); err == nil {
+		*b = appleBool(boolVal)
+		return nil
+	}
+	var strVal string
+	if err := json.Unmarshal(data, &strVal); err == nil {
+		*b = appleBool(strVal == "true")
+		return nil
+	}
+	return fmt.Errorf("cannot unmarshal %s into bool", string(data))
+}
+
 type AppleTokenClaims struct {
-	Sub            string `json:"sub"`
-	Email          string `json:"email"`
-	EmailVerified  bool   `json:"email_verified"`
-	IsPrivateEmail bool   `json:"is_private_email"`
+	Sub            string    `json:"sub"`
+	Email          string    `json:"email"`
+	EmailVerified  appleBool `json:"email_verified"`
+	IsPrivateEmail appleBool `json:"is_private_email"`
 	jwt.RegisteredClaims
 }
 
@@ -86,6 +104,8 @@ func (v *AppleVerifier) VerifyIdentityToken(identityToken string) (*AppleTokenCl
 	})
 
 	if err != nil {
+		// ErrTokenExpired must be checked before the generic ErrInvalidToken catch-all,
+		// because the catch-all wraps everything as ErrInvalidToken.
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrTokenExpired
 		}
