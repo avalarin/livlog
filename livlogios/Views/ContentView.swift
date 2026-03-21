@@ -21,10 +21,11 @@ struct ContentView: View {
     let collection: CollectionModel
     private let isPreview: Bool
 
-    init(collection: CollectionModel, previewItems: [EntryModel] = []) {
+    init(collection: CollectionModel, previewItems: [EntryModel] = [], previewStatistics: [CollectionStatistic] = []) {
         self.collection = collection
         self.isPreview = !previewItems.isEmpty
         _items = State(initialValue: previewItems)
+        _statistics = State(initialValue: previewStatistics)
         _viewMode = AppStorage(wrappedValue: .grid, "viewMode_\(collection.id)")
         _showStatistics = AppStorage(wrappedValue: true, "showStatistics_\(collection.id)")
     }
@@ -300,18 +301,24 @@ struct ContentView: View {
                 GridItem(.flexible())
             ], spacing: 12) {
                 ForEach(statistics) { stat in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(stat.title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(stat.displayValue)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                    Button { } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(stat.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(stat.displayValue)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal)
@@ -326,13 +333,16 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
                 .containerRelativeFrame(.vertical, alignment: .center)
         } else {
-            LazyVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 statisticsContent
+                    .zIndex(1)
 
-                if viewMode == .grid {
-                    gridContent
-                } else {
-                    listContent
+                LazyVStack(spacing: 0) {
+                    if viewMode == .grid {
+                        gridContent
+                    } else {
+                        listContent
+                    }
                 }
             }
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -548,6 +558,10 @@ struct ContentView: View {
 
 #Preview("With Entries") {
     NavigationStack {
-        ContentView(collection: CollectionModel.previewMyList, previewItems: EntryModel.previewItems)
+        ContentView(
+            collection: CollectionModel.previewMyList,
+            previewItems: EntryModel.previewItems,
+            previewStatistics: CollectionStatistic.previewItems
+        )
     }
 }

@@ -483,4 +483,12 @@ extension EntryModel {
         )
     ]
 }
+
+extension CollectionStatistic {
+    static let previewItems: [CollectionStatistic] = [
+        CollectionStatistic(title: "Total", displayValue: "6"),
+        CollectionStatistic(title: "Backlog", displayValue: "0"),
+        CollectionStatistic(title: "Last Entry", displayValue: "Mar 21, 2026")
+    ]
+}
 #endif
