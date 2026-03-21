@@ -20,7 +20,8 @@
       "Bash(git rebase:*)",
       "WebSearch",
       "Bash(git:*)",
-      "Bash(gh run:*)"
+      "Bash(gh run:*)",
+      "Bash(bash .claude/skills/worktree-init/scripts/init-worktree.sh collection-stats-screen)"
     ]
   },
   "hooks": {
