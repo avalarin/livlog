@@ -541,6 +541,70 @@ func (r *CollectionRepository) GetTemplateBySlug(
 	return &c, nil
 }
 
+// CollectionStatistics holds cached aggregate stats for a collection.
+type CollectionStatistics struct {
+	CollectionID   uuid.UUID
+	TotalEntries   int
+	BacklogEntries int
+	LastEntryDate  *time.Time
+	UpdatedAt      time.Time
+}
+
+// GetCollectionStatistics reads cached statistics for a collection.
+// Returns nil (not an error) when no cached row exists yet.
+func (r *CollectionRepository) GetCollectionStatistics(
+	ctx context.Context,
+	collectionID uuid.UUID,
+) (*CollectionStatistics, error) {
+	query := `
+		SELECT collection_id, total_entries, backlog_entries, last_entry_date, updated_at
+		FROM collection_statistics
+		WHERE collection_id = $1
+	`
+
+	var s CollectionStatistics
+	err := r.db.QueryRow(ctx, query, collectionID).Scan(
+		&s.CollectionID,
+		&s.TotalEntries,
+		&s.BacklogEntries,
+		&s.LastEntryDate,
+		&s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get collection statistics: %w", err)
+	}
+
+	return &s, nil
+}
+
+// RefreshCollectionStatistics computes and upserts statistics for a collection
+// from the live entries table.
+func (r *CollectionRepository) RefreshCollectionStatistics(
+	ctx context.Context,
+	collectionID uuid.UUID,
+) error {
+	query := `
+		INSERT INTO collection_statistics (collection_id, total_entries, backlog_entries, last_entry_date, updated_at)
+		SELECT $1, COUNT(*), COUNT(*) FILTER (WHERE score = 0), MAX(date), NOW()
+		FROM entries WHERE collection_id = $1
+		ON CONFLICT (collection_id) DO UPDATE SET
+		  total_entries = EXCLUDED.total_entries,
+		  backlog_entries = EXCLUDED.backlog_entries,
+		  last_entry_date = EXCLUDED.last_entry_date,
+		  updated_at = NOW()
+	`
+
+	_, err := r.db.Exec(ctx, query, collectionID)
+	if err != nil {
+		return fmt.Errorf("failed to refresh collection statistics: %w", err)
+	}
+
+	return nil
+}
+
 // isUniqueViolation checks if an error is a PostgreSQL unique constraint violation (code 23505).
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError

@@ -164,6 +164,17 @@ actor CollectionService {
         )
     }
 
+    // MARK: - Get Statistics
+
+    func getStatistics(collectionID: String) async throws -> [CollectionStatistic] {
+        let (data, _) = try await BackendService.shared.makeAuthenticatedRequest(
+            path: "/collections/\(collectionID)/statistics",
+            method: "GET"
+        )
+
+        return try decoder.decode([CollectionStatistic].self, from: data)
+    }
+
     // MARK: - Remove Share
 
     func removeShare(collectionID: String, userID: String) async throws {

@@ -303,6 +303,64 @@ func validateColor(color string) error {
 	return nil
 }
 
+// CollectionStatItem is a single formatted statistic displayed in the collection detail screen.
+type CollectionStatItem struct {
+	Title        string
+	DisplayValue string
+}
+
+// GetCollectionStatistics returns formatted statistics for a collection.
+// It reads from the cache table and refreshes it on a cache miss.
+// Returns ErrCollectionNotFound if the user has no access to the collection.
+func (s *CollectionService) GetCollectionStatistics(
+	ctx context.Context,
+	collectionID, userID uuid.UUID,
+) ([]CollectionStatItem, error) {
+	// Verify the user has access.
+	_, err := s.collectionRepo.GetUserRole(ctx, collectionID, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			return nil, repository.ErrCollectionNotFound
+		}
+		return nil, fmt.Errorf("failed to get user role: %w", err)
+	}
+
+	stats, err := s.collectionRepo.GetCollectionStatistics(ctx, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get collection statistics: %w", err)
+	}
+
+	// Cache miss — compute and store, then re-read.
+	if stats == nil {
+		if err := s.collectionRepo.RefreshCollectionStatistics(ctx, collectionID); err != nil {
+			return nil, fmt.Errorf("failed to refresh collection statistics: %w", err)
+		}
+		stats, err = s.collectionRepo.GetCollectionStatistics(ctx, collectionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get collection statistics after refresh: %w", err)
+		}
+	}
+
+	// Format last entry date.
+	lastEntryDisplay := "—"
+	if stats != nil && stats.LastEntryDate != nil {
+		lastEntryDisplay = stats.LastEntryDate.Format("Jan 2, 2006")
+	}
+
+	totalEntries := 0
+	backlogEntries := 0
+	if stats != nil {
+		totalEntries = stats.TotalEntries
+		backlogEntries = stats.BacklogEntries
+	}
+
+	return []CollectionStatItem{
+		{Title: "Total", DisplayValue: fmt.Sprintf("%d", totalEntries)},
+		{Title: "Backlog", DisplayValue: fmt.Sprintf("%d", backlogEntries)},
+		{Title: "Last Entry", DisplayValue: lastEntryDisplay},
+	}, nil
+}
+
 // CreateDefaultCollections creates default collections if user has none
 func (s *CollectionService) CreateDefaultCollections(
 	ctx context.Context,

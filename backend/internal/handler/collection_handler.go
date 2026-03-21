@@ -34,6 +34,7 @@ func (h *CollectionHandler) RegisterRoutes(r chi.Router) {
 	r.Put("/collections/{id}", h.UpdateCollection)
 	r.Delete("/collections/{id}", h.DeleteCollection)
 	r.Get("/collections/{id}/members", h.GetMembers)
+	r.Get("/collections/{id}/statistics", h.GetCollectionStatistics)
 	r.Post("/collections/{id}/shares", h.AddShare)
 	r.Patch("/collections/{id}/shares/{userID}", h.UpdateShare)
 	r.Delete("/collections/{id}/shares/{userID}", h.RemoveShare)
@@ -503,6 +504,52 @@ func (h *CollectionHandler) RemoveShare(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondWithJSON(h.log, w, http.StatusOK, map[string]string{"message": "User removed from collection"})
+}
+
+type statisticItemResponse struct {
+	Title        string `json:"title"`
+	DisplayValue string `json:"display_value"`
+}
+
+func (h *CollectionHandler) GetCollectionStatistics(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(h.log, w, http.StatusUnauthorized, "User not authenticated", nil)
+		return
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid user ID", err)
+		return
+	}
+
+	collectionID := chi.URLParam(r, "id")
+	cid, err := uuid.Parse(collectionID)
+	if err != nil {
+		respondWithError(h.log, w, http.StatusBadRequest, "Invalid collection ID", err)
+		return
+	}
+
+	stats, err := h.collectionService.GetCollectionStatistics(r.Context(), cid, uid)
+	if err != nil {
+		if errors.Is(err, repository.ErrCollectionNotFound) {
+			respondWithError(h.log, w, http.StatusNotFound, "Collection not found", err)
+			return
+		}
+		respondWithError(h.log, w, http.StatusInternalServerError, "Failed to get collection statistics", err)
+		return
+	}
+
+	response := make([]statisticItemResponse, len(stats))
+	for i, item := range stats {
+		response[i] = statisticItemResponse{
+			Title:        item.Title,
+			DisplayValue: item.DisplayValue,
+		}
+	}
+
+	respondWithJSON(h.log, w, http.StatusOK, response)
 }
 
 func mapCollectionToResponse(c *repository.Collection) collectionResponse {

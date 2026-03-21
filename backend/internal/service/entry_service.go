@@ -151,6 +151,11 @@ func (s *EntryService) CreateEntry(
 		}
 	}
 
+	// Refresh collection statistics cache (best-effort).
+	if collectionID != nil {
+		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *collectionID)
+	}
+
 	return entry, nil
 }
 
@@ -295,6 +300,14 @@ func (s *EntryService) UpdateEntry(
 		}
 	}
 
+	// Refresh collection statistics cache for affected collections (best-effort).
+	if existing.CollectionID != nil {
+		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *existing.CollectionID)
+	}
+	if collectionID != nil && (existing.CollectionID == nil || *collectionID != *existing.CollectionID) {
+		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *collectionID)
+	}
+
 	return entry, nil
 }
 
@@ -323,7 +336,16 @@ func (s *EntryService) DeleteEntry(
 		return repository.ErrEntryNotFound
 	}
 
-	return s.entryRepo.DeleteEntry(ctx, id)
+	if err := s.entryRepo.DeleteEntry(ctx, id); err != nil {
+		return err
+	}
+
+	// Refresh collection statistics cache (best-effort).
+	if entry.CollectionID != nil {
+		_ = s.collectionRepo.RefreshCollectionStatistics(ctx, *entry.CollectionID)
+	}
+
+	return nil
 }
 
 // DeleteEntries bulk-deletes entries owned by userID. Returns the count of deleted rows.

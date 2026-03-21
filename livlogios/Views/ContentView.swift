@@ -13,7 +13,8 @@ enum ViewMode: String {
 }
 
 struct ContentView: View {
-    @AppStorage("viewMode") private var viewMode: ViewMode = .grid
+    @AppStorage private var viewMode: ViewMode
+    @AppStorage private var showStatistics: Bool
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -24,6 +25,8 @@ struct ContentView: View {
         self.collection = collection
         self.isPreview = !previewItems.isEmpty
         _items = State(initialValue: previewItems)
+        _viewMode = AppStorage(wrappedValue: .grid, "viewMode_\(collection.id)")
+        _showStatistics = AppStorage(wrappedValue: true, "showStatistics_\(collection.id)")
     }
 
     @State private var showingAddEntry = false
@@ -35,6 +38,7 @@ struct ContentView: View {
 
     @State private var items: [EntryModel]
     @State private var types: [EntryTypeModel] = []
+    @State private var statistics: [CollectionStatistic] = []
     @State private var isLoading = false
     @State private var hasLoaded = false
     @State private var errorMessage: String?
@@ -60,11 +64,14 @@ struct ContentView: View {
         do {
             async let entriesTask = EntryService.shared.getEntries(collectionID: collection.id)
             async let typesTask = TypeService.shared.getTypes()
+            async let statsTask = CollectionService.shared.getStatistics(collectionID: collection.id)
             let newItems = try await entriesTask
             let newTypes = try await typesTask
+            let newStats = try await statsTask
             withAnimation(.easeInOut(duration: 0.3)) {
                 items = newItems
                 types = newTypes
+                statistics = newStats
             }
             selectedIDs.removeAll()
         } catch is CancellationError {
@@ -155,6 +162,17 @@ struct ContentView: View {
                         Label(
                             viewMode == .grid ? "Switch to List" : "Switch to Grid",
                             systemImage: viewMode == .grid ? "list.bullet" : "square.grid.2x2"
+                        )
+                    }
+
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            showStatistics.toggle()
+                        }
+                    } label: {
+                        Label(
+                            showStatistics ? "Hide Statistics" : "Show Statistics",
+                            systemImage: showStatistics ? "eye.slash" : "eye"
                         )
                     }
 
@@ -274,6 +292,34 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var statisticsContent: some View {
+        if showStatistics && !statistics.isEmpty {
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 12) {
+                ForEach(statistics) { stat in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(stat.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(stat.displayValue)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color(.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 12)
+        }
+    }
+
+    @ViewBuilder
     private var scrollContent: some View {
         if items.isEmpty && hasLoaded {
             EmptyStateView(showingAddEntry: $showingAddEntry, canWrite: collection.myRole.canWrite)
@@ -281,6 +327,8 @@ struct ContentView: View {
                 .containerRelativeFrame(.vertical, alignment: .center)
         } else {
             LazyVStack(spacing: 0) {
+                statisticsContent
+
                 if viewMode == .grid {
                     gridContent
                 } else {
@@ -354,6 +402,7 @@ struct ContentView: View {
         .navigationTitle(isSelectMode
             ? (selectedIDs.isEmpty ? "Select Entries" : "\(selectedIDs.count) Selected")
             : collection.name)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .sheet(isPresented: $showingAddEntry) {
             AddEntryView(collection: collection, onEntryCreated: handleEntryCreated)

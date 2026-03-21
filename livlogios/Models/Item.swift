@@ -128,6 +128,20 @@ struct CollectionModel: Codable, Identifiable {
     }
 }
 
+// MARK: - Collection Statistic
+
+struct CollectionStatistic: Codable, Identifiable {
+    let title: String
+    let displayValue: String
+
+    var id: String { title }
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case displayValue = "display_value"
+    }
+}
+
 // MARK: - Field Definition
 
 struct FieldDefinition: Codable, Equatable {
